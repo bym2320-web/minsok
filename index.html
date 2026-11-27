@@ -1,0 +1,3278 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>민속 알림 - 현장 전원 실시간 알림 앱</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Firebase Compat SDK (App / Firestore / Analytics) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics-compat.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background-color: #F4F6F9;
+      color: #111827;
+      font-family: 'Inter', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+      overflow-x: hidden;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* 탭 완전 분리: 반응형 display 규칙이 숨김 상태를 덮어쓰지 못하도록 강제 */
+    .tab-section-hidden {
+      display: none !important;
+    }
+
+    /* 모바일·PC 공통 푸시 배너 및 토스트 (transform 충돌 방지: opacity/margin-top만 애니메이션) */
+    #pushBanner {
+      position: fixed;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 90%;
+      max-width: 440px;
+      z-index: 99999;
+      background-color: #FFFFFF;
+      color: #111827;
+      opacity: 1;
+    }
+    #toast {
+      position: fixed;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 90%;
+      max-width: 440px;
+      z-index: 99998;
+      background-color: #FFFFFF;
+      color: #111827;
+      opacity: 1;
+      pointer-events: none;
+    }
+    @keyframes bannerFadeIn {
+      from {
+        opacity: 0;
+        margin-top: -10px;
+      }
+      to {
+        opacity: 1;
+        margin-top: 0;
+      }
+    }
+    .popup-animate {
+      animation: bannerFadeIn 0.22s ease-out forwards;
+    }
+
+    @keyframes noticeHighlightPulse {
+      0% { box-shadow: 0 0 0 0 rgba(179, 14, 42, 0.45); }
+      70% { box-shadow: 0 0 0 10px rgba(179, 14, 42, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(179, 14, 42, 0); }
+    }
+    .notice-highlight {
+      animation: noticeHighlightPulse 1.1s ease-out 2;
+    }
+
+    /* PC(1024px 이상) 전용: [사무실&현장] 탭 광폭 2단 레이아웃 + 1화면 맞춤 캘린더 */
+    @media (min-width: 1024px) {
+      .pc-wide-container {
+        width: 95% !important;
+        max-width: 1720px !important;
+      }
+      .pc-office-main {
+        padding-bottom: 76px !important;
+      }
+      #officeFieldTabPanel:not(.tab-section-hidden) {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 460px;
+        gap: 20px;
+        height: calc(100vh - 196px);
+        min-height: 540px;
+        overflow: hidden;
+        align-items: stretch;
+      }
+      #officeCalendarCard {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding: 14px 16px !important;
+      }
+      #calendarGrid {
+        flex: 1 1 0%;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        grid-template-rows: repeat(var(--cal-rows, 5), minmax(0, 1fr));
+      }
+      #officeRightColumn {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        height: 100%;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .pc-side-panel {
+        flex: 1 1 0%;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .pc-side-panel-list {
+        flex: 1 1 0%;
+        min-height: 0;
+        max-height: none !important;
+        overflow-y: auto;
+      }
+      .cal-month-title {
+        font-size: 1rem !important;
+        min-width: 108px !important;
+      }
+      .cal-weekday-header {
+        font-size: 12.5px !important;
+        padding-top: 4px !important;
+        padding-bottom: 6px !important;
+      }
+      .cal-day-cell {
+        height: 100% !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+        padding: 4px 6px !important;
+      }
+      .cal-day-num {
+        font-size: 13px !important;
+      }
+      .cal-day-num-today {
+        width: 24px !important;
+        height: 24px !important;
+        font-size: 13px !important;
+      }
+      .cal-schedule-wrap {
+        flex: 1 1 0%;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .cal-schedule-item {
+        font-size: 11px !important;
+        line-height: 1.25 !important;
+        padding: 2px 5px !important;
+        margin-top: 2px !important;
+        border-radius: 5px !important;
+      }
+      .cal-schedule-text {
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        display: block !important;
+      }
+      .cal-schedule-icon {
+        font-size: 10px !important;
+      }
+      .cal-count-badge {
+        font-size: 10.5px !important;
+        padding: 2px 5px !important;
+        border-radius: 5px !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-[#F4F6F9] text-slate-900 min-h-screen">
+
+  <!-- 실시간 상단 푸시 팝업 배너 -->
+  <div id="pushBanner" class="hidden rounded-2xl shadow-2xl border-2 border-[#B30E2A]/30 p-3.5 cursor-pointer" role="alert">
+    <div class="flex items-start gap-3">
+      <div id="pushBannerAvatar" class="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-white text-[11px] font-extrabold shadow-sm whitespace-nowrap"></div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-1.5 min-w-0">
+            <span id="pushBannerUrgent" class="hidden px-1.5 py-0.5 rounded bg-red-600 text-white text-[10px] font-extrabold shrink-0">긴급</span>
+            <p id="pushBannerTitle" class="text-xs font-extrabold truncate" style="color:#111827;"></p>
+          </div>
+          <button id="pushBannerClose" type="button" class="text-slate-400 hover:text-slate-700 text-sm font-bold px-1 shrink-0" aria-label="닫기">✕</button>
+        </div>
+        <p id="pushBannerBody" class="text-xs font-medium mt-1 line-clamp-2 break-words" style="color:#374151;"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 공통 알림 토스트 -->
+  <div id="toast" class="hidden rounded-xl shadow-xl border border-slate-200 px-4 py-3 text-center">
+    <p id="toastMessage" class="text-xs font-bold" style="color:#111827;"></p>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- 1. 인증 화면 (로그인 / 회원가입)                           -->
+  <!-- ========================================================= -->
+  <section id="authView" class="min-h-screen flex items-center justify-center p-4 bg-[#F4F6F9]">
+    <div class="w-full max-w-[400px] bg-white rounded-3xl shadow-lg border border-slate-200/80 p-6 sm:p-7">
+      <!-- 브랜드 로고 영역 -->
+      <div class="flex flex-col items-center text-center mb-6">
+        <div id="authLogoSlot" class="mb-3 drop-shadow-sm"></div>
+        <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">민속 알림</h1>
+        <p class="text-xs text-slate-500 mt-1 font-medium">현장 전원 실시간 소통 · 업무 달력</p>
+      </div>
+
+      <!-- 로그인 폼 -->
+      <form id="loginForm" class="space-y-3.5" novalidate>
+        <div>
+          <label for="loginName" class="block text-xs font-bold text-slate-700 mb-1.5">이름 (아이디)</label>
+          <input
+            id="loginName"
+            type="text"
+            autocomplete="username"
+            placeholder="이름을 입력하세요"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:border-[#B30E2A] focus:ring-2 focus:ring-[#B30E2A]/15 outline-none text-sm font-medium transition"
+          />
+        </div>
+        <div>
+          <label for="loginPassword" class="block text-xs font-bold text-slate-700 mb-1.5">비밀번호</label>
+          <input
+            id="loginPassword"
+            type="password"
+            autocomplete="current-password"
+            placeholder="비밀번호를 입력하세요"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:border-[#B30E2A] focus:ring-2 focus:ring-[#B30E2A]/15 outline-none text-sm font-medium transition"
+          />
+        </div>
+
+        <p id="loginErrorMsg" class="hidden text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2"></p>
+
+        <!-- 로그인 버튼 바로 위 자동 로그인 체크박스 -->
+        <label for="autoLoginCheckbox" class="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200/80 cursor-pointer select-none hover:bg-slate-100/70 transition">
+          <input
+            id="autoLoginCheckbox"
+            type="checkbox"
+            class="w-4 h-4 rounded accent-[#B30E2A] cursor-pointer"
+          />
+          <span class="text-xs font-bold text-slate-700">자동 로그인 (브라우저 재접속 시 유지)</span>
+        </label>
+
+        <button
+          type="submit"
+          class="w-full py-3 rounded-xl bg-[#B30E2A] hover:bg-[#960B22] active:scale-[0.99] text-white text-sm font-extrabold shadow-md shadow-[#B30E2A]/20 transition cursor-pointer"
+        >
+          로그인
+        </button>
+
+        <div class="pt-2 text-center">
+          <button
+            id="goSignupBtn"
+            type="button"
+            class="text-xs font-bold text-slate-500 hover:text-[#B30E2A] transition cursor-pointer py-1 px-2"
+          >
+            계정이 없으신가요? <span class="underline text-[#B30E2A]">회원가입하기</span>
+          </button>
+        </div>
+      </form>
+
+      <!-- 회원가입 폼 (이름, 비밀번호, 비밀번호 재확인 3개 항목) -->
+      <form id="signupForm" class="hidden space-y-3.5" novalidate>
+        <div>
+          <label for="signupName" class="block text-xs font-bold text-slate-700 mb-1.5">이름 (아이디)</label>
+          <input
+            id="signupName"
+            type="text"
+            autocomplete="username"
+            placeholder="실명 또는 현장 이름 입력"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:border-[#B30E2A] focus:ring-2 focus:ring-[#B30E2A]/15 outline-none text-sm font-medium transition"
+          />
+        </div>
+        <div>
+          <label for="signupPassword" class="block text-xs font-bold text-slate-700 mb-1.5">비밀번호</label>
+          <input
+            id="signupPassword"
+            type="password"
+            autocomplete="new-password"
+            placeholder="비밀번호 입력"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:border-[#B30E2A] focus:ring-2 focus:ring-[#B30E2A]/15 outline-none text-sm font-medium transition"
+          />
+        </div>
+        <div>
+          <label for="signupPasswordConfirm" class="block text-xs font-bold text-slate-700 mb-1.5">비밀번호 재확인</label>
+          <input
+            id="signupPasswordConfirm"
+            type="password"
+            autocomplete="new-password"
+            placeholder="비밀번호를 한 번 더 입력하세요"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:border-[#B30E2A] focus:ring-2 focus:ring-[#B30E2A]/15 outline-none text-sm font-medium transition"
+          />
+          <p id="signupPwMismatchMsg" class="hidden text-xs font-bold text-red-600 mt-1.5">비밀번호가 일치하지 않습니다.</p>
+        </div>
+
+        <p id="signupErrorMsg" class="hidden text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2"></p>
+
+        <button
+          type="submit"
+          class="w-full py-3 rounded-xl bg-[#B30E2A] hover:bg-[#960B22] active:scale-[0.99] text-white text-sm font-extrabold shadow-md shadow-[#B30E2A]/20 transition cursor-pointer"
+        >
+          회원가입 완료
+        </button>
+
+        <div class="pt-2 text-center">
+          <button
+            id="goLoginBtn"
+            type="button"
+            class="text-xs font-bold text-slate-500 hover:text-[#B30E2A] transition cursor-pointer py-1 px-2"
+          >
+            이미 계정이 있으신가요? <span class="underline text-[#B30E2A]">로그인하기</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- ========================================================= -->
+  <!-- 2. 메인 앱 화면                                           -->
+  <!-- ========================================================= -->
+  <div id="appView" class="hidden min-h-screen flex flex-col">
+
+    <!-- 상단 고정 헤더 -->
+    <header class="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200/80 shadow-xs">
+      <div id="headerInner" class="w-full pc-wide-container mx-auto px-2.5 md:px-4 py-2 transition-all">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <!-- 좌측: 인라인 SVG '民俗' 로고 (54px) + 타이틀 -->
+          <div class="flex items-center gap-2.5 shrink-0">
+            <div id="headerLogoSlot" class="shrink-0"></div>
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5">
+                <h1 class="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight whitespace-nowrap">민속 알림</h1>
+              </div>
+              <p id="headerClockText" class="text-[11px] font-semibold text-slate-500 whitespace-nowrap"></p>
+            </div>
+          </div>
+
+          <!-- 우측: 사용자 배지, 근무/휴무 토글, 관리자(N/5), 로그아웃 -->
+          <div class="flex items-center gap-1.5 flex-wrap justify-end">
+            <!-- 현재 사용자 배지 (이름 + 파트) -->
+            <div id="currentUserBadge" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200/80 text-xs font-extrabold text-slate-800 whitespace-nowrap"></div>
+
+            <!-- 근무 중 / 휴무(연차) 토글 -->
+            <button
+              id="workStatusToggleBtn"
+              type="button"
+              class="px-2.5 py-1.5 rounded-xl text-xs font-extrabold border transition cursor-pointer whitespace-nowrap flex items-center gap-1"
+            ></button>
+
+            <!-- 관리자 버튼 (관리자만 표시) -->
+            <button
+              id="openAdminBtn"
+              type="button"
+              class="hidden px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-extrabold transition cursor-pointer whitespace-nowrap"
+            >
+              관리자 1/5
+            </button>
+
+            <!-- 로그아웃 버튼 -->
+            <button
+              id="logoutBtn"
+              type="button"
+              class="px-2.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold transition cursor-pointer whitespace-nowrap"
+            >
+              로그아웃
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- [현장] 탭 전용: 최근 7일 날짜 선택 바 -->
+      <div id="dateHistoryWrapper" class="hidden border-t border-slate-100 bg-slate-50/80">
+        <div class="w-full md:max-w-[840px] mx-auto px-2.5 md:px-4 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          <div id="dateHistoryBar" class="flex items-center gap-1.5"></div>
+        </div>
+      </div>
+    </header>
+
+    <!-- 메인 콘텐츠 영역 -->
+    <main id="mainContentContainer" class="flex-1 w-full pc-wide-container pc-office-main mx-auto px-2.5 md:px-4 py-3 pb-24 transition-all">
+
+      <!-- ===================================================== -->
+      <!-- 탭 1: [사무실&현장] 업무 달력 + 사무실/현장 소통        -->
+      <!-- ===================================================== -->
+      <div id="officeFieldTabPanel" class="grid grid-cols-1 gap-3.5 items-start">
+
+        <!-- 왼쪽 영역 (PC 1fr 1화면 맞춤): 월간 업무 달력 -->
+        <section id="officeCalendarCard" class="min-w-0 bg-white rounded-2xl shadow-sm border border-slate-200/80 p-2.5 sm:p-3.5">
+          <!-- 달력 상단 컨트롤 바 -->
+          <div class="shrink-0 flex items-center justify-between gap-2 mb-2.5 flex-nowrap">
+            <div class="flex items-center gap-1.5 flex-nowrap shrink-0">
+              <button
+                id="calPrevMonthBtn"
+                type="button"
+                aria-label="이전 달"
+                class="w-7 h-7 lg:w-8 lg:h-8 shrink-0 whitespace-nowrap rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-sm flex items-center justify-center cursor-pointer transition"
+              >
+                ‹
+              </button>
+              <h2 id="calMonthTitle" class="cal-month-title whitespace-nowrap shrink-0 text-sm font-extrabold text-slate-900 min-w-[92px] text-center tracking-tight"></h2>
+              <button
+                id="calNextMonthBtn"
+                type="button"
+                aria-label="다음 달"
+                class="w-7 h-7 lg:w-8 lg:h-8 shrink-0 whitespace-nowrap rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-sm flex items-center justify-center cursor-pointer transition"
+              >
+                ›
+              </button>
+              <button
+                id="calTodayBtn"
+                type="button"
+                class="ml-0.5 px-2.5 py-1 lg:px-3 lg:py-1.5 shrink-0 whitespace-nowrap rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold cursor-pointer transition"
+              >
+                오늘
+              </button>
+            </div>
+
+            <button
+              id="calAddScheduleBtn"
+              type="button"
+              class="px-3 py-1.5 lg:px-3.5 lg:py-1.5 shrink-0 whitespace-nowrap rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-xs font-bold shadow-sm transition cursor-pointer"
+            >
+              + 일정추가
+            </button>
+          </div>
+
+          <!-- 요일 헤더 -->
+          <div class="cal-weekday-header shrink-0 grid grid-cols-7 text-center text-[11px] font-bold pb-1.5 border-b border-slate-100">
+            <span class="text-red-500">일</span>
+            <span class="text-slate-600">월</span>
+            <span class="text-slate-600">화</span>
+            <span class="text-slate-600">수</span>
+            <span class="text-slate-600">목</span>
+            <span class="text-slate-600">금</span>
+            <span class="text-blue-600">토</span>
+          </div>
+
+          <!-- 월간 달력 그리드 -->
+          <div id="calendarGrid" class="grid grid-cols-7 border-l border-t border-slate-100 rounded-b-xl overflow-hidden"></div>
+        </section>
+
+        <!-- 오른쪽 영역 (PC 460px 고정): 위쪽 [사무실] + 아래쪽 [현장] -->
+        <div id="officeRightColumn" class="min-w-0 flex flex-col gap-3.5">
+
+          <!-- 사무실 전달 사항 -->
+          <section class="pc-side-panel bg-white rounded-2xl shadow-sm border border-slate-200/80 border-t-[3px] border-t-blue-500 overflow-hidden">
+            <div class="shrink-0 px-4 py-2.5 border-b border-slate-100 flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 text-xs font-extrabold shrink-0 whitespace-nowrap">사무실</span>
+                <h3 id="officeDateTitle" class="text-sm font-extrabold text-slate-900 truncate"></h3>
+              </div>
+              <span id="officeSummaryText" class="text-xs font-semibold text-slate-500 shrink-0 whitespace-nowrap">0건</span>
+            </div>
+
+            <div id="officeAllConfirmedBar" class="hidden shrink-0 px-4 py-1.5 bg-emerald-50/80 border-b border-emerald-100 text-xs font-bold text-emerald-700 flex items-center gap-1.5">
+              <span>✅</span>
+              <span>현장 확인 완료</span>
+            </div>
+
+            <div id="officePostList" class="pc-side-panel-list divide-y divide-slate-100 px-4 py-1 min-h-[76px]"></div>
+
+            <!-- 사무실 글 입력 영역 (오늘/미래) -->
+            <div id="officeInputArea" class="shrink-0 p-3 bg-slate-50/70 border-t border-slate-100 space-y-2">
+              <textarea
+                id="officePostInput"
+                rows="2"
+                placeholder="사무실 전달 사항을 입력하세요 (Ctrl+Enter로 등록)"
+                class="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 outline-none text-xs font-medium resize-none"
+              ></textarea>
+              <div class="flex items-center justify-between gap-2">
+                <span id="officeAuthorLabel" class="text-[11px] font-bold text-slate-500 truncate"></span>
+                <button
+                  id="officePostSubmitBtn"
+                  type="button"
+                  class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-xs font-extrabold shadow-sm transition cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  사무실 글 등록
+                </button>
+              </div>
+            </div>
+
+            <!-- 지난 날짜 글쓰기 제한 안내 -->
+            <div id="officePastLockedArea" class="hidden shrink-0 p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-2">
+              <span class="text-xs font-bold text-slate-500">지난 날짜에는 글을 쓸 수 없습니다.</span>
+              <button
+                type="button"
+                data-go-today="1"
+                class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold cursor-pointer whitespace-nowrap shrink-0 transition"
+              >
+                오늘로 이동
+              </button>
+            </div>
+          </section>
+
+          <!-- 현장 보고 사항 -->
+          <section class="pc-side-panel bg-white rounded-2xl shadow-sm border border-slate-200/80 border-t-[3px] border-t-amber-500 overflow-hidden">
+            <div class="shrink-0 px-4 py-2.5 border-b border-slate-100 flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="px-2.5 py-0.5 rounded-md bg-amber-50 text-amber-700 text-xs font-extrabold shrink-0 whitespace-nowrap">현장</span>
+                <h3 id="fieldReportDateTitle" class="text-sm font-extrabold text-slate-900 truncate"></h3>
+              </div>
+              <span id="fieldReportSummaryText" class="text-xs font-semibold text-slate-500 shrink-0 whitespace-nowrap">0건</span>
+            </div>
+
+            <div id="fieldReportList" class="pc-side-panel-list divide-y divide-slate-100 px-4 py-1 min-h-[76px]"></div>
+
+            <!-- 현장 보고 입력 영역 (오늘/미래) -->
+            <div id="fieldReportInputArea" class="shrink-0 p-3 bg-slate-50/70 border-t border-slate-100 space-y-2">
+              <textarea
+                id="fieldReportInput"
+                rows="2"
+                placeholder="현장 보고 사항을 입력하세요 (Ctrl+Enter로 등록)"
+                class="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/15 outline-none text-xs font-medium resize-none"
+              ></textarea>
+              <div class="flex items-center justify-between gap-2">
+                <span id="fieldReportAuthorLabel" class="text-[11px] font-bold text-slate-500 truncate"></span>
+                <button
+                  id="fieldReportSubmitBtn"
+                  type="button"
+                  class="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-white text-xs font-extrabold shadow-sm transition cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  현장 글 등록
+                </button>
+              </div>
+            </div>
+
+            <!-- 지난 날짜 글쓰기 제한 안내 -->
+            <div id="fieldReportPastLockedArea" class="hidden shrink-0 p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-2">
+              <span class="text-xs font-bold text-slate-500">지난 날짜에는 글을 쓸 수 없습니다.</span>
+              <button
+                type="button"
+                data-go-today="1"
+                class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold cursor-pointer whitespace-nowrap shrink-0 transition"
+              >
+                오늘로 이동
+              </button>
+            </div>
+          </section>
+
+        </div>
+      </div>
+
+      <!-- ===================================================== -->
+      <!-- 탭 2: [현장] 민속 알림 실시간 전파                      -->
+      <!-- ===================================================== -->
+      <div id="fieldTabPanel" class="hidden tab-section-hidden space-y-4">
+
+        <!-- 미확인 공지 상단 고정 배너 (확인 전까지 유지) -->
+        <div id="unreadStickyBanner" class="hidden sticky top-[110px] z-30 bg-[#B30E2A] text-white rounded-2xl shadow-lg p-3.5 border border-[#8E0A21]">
+          <div class="flex items-center justify-between gap-2.5">
+            <div id="unreadBannerJump" class="flex-1 min-w-0 cursor-pointer">
+              <div class="flex items-center gap-1.5">
+                <span class="px-2 py-0.5 rounded-full bg-white/20 text-[10px] font-extrabold whitespace-nowrap" id="unreadBannerCount">미확인 1건</span>
+                <span id="unreadBannerSender" class="text-xs font-extrabold truncate"></span>
+              </div>
+              <p id="unreadBannerText" class="text-xs text-white/95 mt-1 truncate font-medium"></p>
+            </div>
+            <button
+              id="unreadBannerConfirmBtn"
+              type="button"
+              class="px-3 py-2 rounded-xl bg-white text-[#B30E2A] hover:bg-red-50 text-xs font-extrabold shadow-sm shrink-0 whitespace-nowrap cursor-pointer transition"
+            >
+              확인했습니다
+            </button>
+          </div>
+        </div>
+
+        <!-- 과거 날짜 조회 안내 배너 -->
+        <div id="pastDateBanner" class="hidden bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-center justify-between gap-2">
+          <p id="pastDateBannerText" class="text-xs font-bold text-amber-800"></p>
+          <button
+            id="backToTodayNoticeBtn"
+            type="button"
+            class="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold whitespace-nowrap shrink-0 cursor-pointer transition"
+          >
+            오늘로 돌아가기
+          </button>
+        </div>
+
+        <!-- 새 알림 작성 카드 (오늘 날짜에서만 표시) -->
+        <section id="noticeComposerCard" class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 space-y-3">
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <h2 class="text-sm font-extrabold text-slate-900">민속 알림 작성</h2>
+            <!-- 일반 / 긴급 선택 -->
+            <div class="inline-flex rounded-xl bg-slate-100 p-1 gap-1">
+              <button
+                id="typeNormalBtn"
+                type="button"
+                class="px-3 py-1 rounded-lg text-xs font-extrabold transition cursor-pointer bg-white text-slate-900 shadow-xs"
+              >
+                일반
+              </button>
+              <button
+                id="typeUrgentBtn"
+                type="button"
+                class="px-3 py-1 rounded-lg text-xs font-extrabold transition cursor-pointer text-slate-500 hover:text-red-600"
+              >
+                🚨 긴급
+              </button>
+            </div>
+          </div>
+
+          <!-- 전파 대상 파트 선택 -->
+          <div>
+            <p class="text-[11px] font-bold text-slate-500 mb-1.5">전파 대상 선택 (모든 직원이 열람 가능 · 지정 파트만 업무 수행 가능)</p>
+            <div id="targetPartSelector" class="flex items-center gap-1.5 flex-wrap"></div>
+          </div>
+
+          <textarea
+            id="noticeInput"
+            rows="3"
+            placeholder="현장에 전달할 내용을 입력하세요..."
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:border-[#B30E2A] focus:ring-2 focus:ring-[#B30E2A]/15 outline-none text-sm font-medium resize-none transition"
+          ></textarea>
+
+          <div class="flex items-center justify-between gap-2">
+            <span id="noticeTargetHint" class="text-[11px] font-bold text-slate-500">전체 전원에게 전파됩니다.</span>
+            <button
+              id="sendNoticeBtn"
+              type="button"
+              class="px-4 py-2.5 rounded-xl bg-[#B30E2A] hover:bg-[#960B22] active:scale-[0.98] text-white text-xs font-extrabold shadow-md shadow-[#B30E2A]/20 transition cursor-pointer whitespace-nowrap shrink-0"
+            >
+              전원 전파하기
+            </button>
+          </div>
+        </section>
+
+        <!-- 전파 목록 필터 바 -->
+        <div class="flex items-center justify-between gap-2 flex-wrap px-0.5">
+          <div class="flex items-center gap-1.5">
+            <button data-notice-filter="all" type="button" class="notice-filter-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-slate-900 text-white cursor-pointer transition">전체</button>
+            <button data-notice-filter="unread" type="button" class="notice-filter-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-white border border-slate-200 text-slate-600 cursor-pointer transition">미확인</button>
+            <button data-notice-filter="urgent" type="button" class="notice-filter-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-white border border-slate-200 text-slate-600 cursor-pointer transition">긴급</button>
+          </div>
+          <span id="noticeCountSummary" class="text-xs font-bold text-slate-500">0건</span>
+        </div>
+
+        <!-- 전파 카드 리스트 -->
+        <div id="noticeList" class="space-y-3"></div>
+      </div>
+
+    </main>
+
+    <!-- 하단 고정 2개 카테고리 탭 바 -->
+    <nav class="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur border-t border-slate-200 py-2 shadow-[0_-4px_12px_rgba(15,23,42,0.05)]">
+      <div id="bottomTabInner" class="w-full pc-wide-container mx-auto px-2.5 md:px-4 grid grid-cols-2 gap-2 transition-all">
+        <button
+          id="tabOfficeFieldBtn"
+          type="button"
+          class="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-[#B30E2A] text-white shadow-sm"
+        >
+          <span>📅</span>
+          <span>사무실&amp;현장</span>
+        </button>
+        <button
+          id="tabFieldBtn"
+          type="button"
+          class="relative flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600"
+        >
+          <span>📢</span>
+          <span>현장</span>
+          <span id="fieldTabUnreadBadge" class="hidden ml-1 px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-extrabold leading-none">0</span>
+        </button>
+      </div>
+    </nav>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- 3. 모달들 (관리자 / 일정 상세 / 일정 추가·수정 / 확인창)    -->
+  <!-- ========================================================= -->
+
+  <!-- 관리자 모달 (최대 5명 권한 관리, 파트 지정, 회원 강퇴) -->
+  <div id="adminModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3">
+    <div class="w-full max-w-[520px] max-h-[86vh] bg-white rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-2 shrink-0">
+        <div>
+          <h3 class="text-base font-extrabold text-slate-900">관리자 및 파트 관리</h3>
+          <p id="adminQuotaText" class="text-xs font-bold text-[#B30E2A] mt-0.5">현재 관리자: 0 / 5명</p>
+        </div>
+        <button id="closeAdminModalBtn" type="button" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold cursor-pointer">✕</button>
+      </div>
+      <div id="adminUserList" class="flex-1 overflow-y-auto p-4 space-y-2.5"></div>
+      <div class="px-5 py-3 bg-slate-50 border-t border-slate-100 text-[11px] text-slate-500 font-medium shrink-0">
+        관리자는 최대 5명까지 지정할 수 있으며, 마지막 1명은 해제할 수 없습니다. 강제 탈퇴된 이름은 재가입이 차단됩니다.
+      </div>
+    </div>
+  </div>
+
+  <!-- 캘린더 일정 상세 보기 팝업 -->
+  <div id="scheduleDetailModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="w-full max-w-[420px] bg-white rounded-3xl shadow-2xl border border-slate-200 p-5 space-y-4">
+      <div>
+        <p id="detailScheduleDate" class="text-xs font-bold text-slate-500"></p>
+        <div class="flex items-baseline gap-2 mt-1.5">
+          <span id="detailScheduleTime" class="text-sm font-extrabold text-blue-600 shrink-0 whitespace-nowrap">종일</span>
+          <h3 id="detailScheduleTitle" class="text-base font-extrabold text-slate-900 break-words"></h3>
+        </div>
+      </div>
+
+      <div id="detailScheduleMemoBox" class="rounded-2xl bg-slate-50 border border-slate-200/80 p-3.5 text-sm text-slate-700 font-medium whitespace-pre-wrap break-words min-h-[60px]"></div>
+
+      <p id="detailScheduleMeta" class="text-xs font-semibold text-slate-500"></p>
+
+      <div class="flex items-center justify-end gap-2 pt-1">
+        <button
+          id="detailEditBtn"
+          type="button"
+          class="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-extrabold cursor-pointer transition"
+        >
+          수정
+        </button>
+        <button
+          id="detailCloseBtn"
+          type="button"
+          class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold cursor-pointer transition"
+        >
+          닫기
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 캘린더 일정 추가 / 수정 팝업 -->
+  <div id="scheduleFormModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <form id="scheduleForm" class="w-full max-w-[440px] bg-white rounded-3xl shadow-2xl border border-slate-200 p-5 space-y-3.5" novalidate>
+      <h3 id="scheduleFormTitle" class="text-base font-extrabold text-slate-900">일정 추가</h3>
+
+      <!-- 상단 2열 배치: 날짜 / 시간(선택) -->
+      <div class="grid grid-cols-2 gap-2.5">
+        <div>
+          <label for="scheduleDateInput" class="block text-xs font-bold text-slate-700 mb-1">날짜</label>
+          <input
+            id="scheduleDateInput"
+            type="date"
+            class="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:border-blue-500 outline-none text-xs font-bold"
+          />
+        </div>
+        <div>
+          <label for="scheduleTimeInput" class="block text-xs font-bold text-slate-700 mb-1">시간 <span class="text-slate-400 font-normal">(선택)</span></label>
+          <input
+            id="scheduleTimeInput"
+            type="time"
+            class="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:border-blue-500 outline-none text-xs font-bold"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label for="scheduleTitleInput" class="block text-xs font-bold text-slate-700 mb-1">일정</label>
+        <input
+          id="scheduleTitleInput"
+          type="text"
+          placeholder="일정 제목을 입력하세요"
+          class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:border-blue-500 outline-none text-sm font-medium"
+        />
+      </div>
+
+      <div>
+        <label for="scheduleMemoInput" class="block text-xs font-bold text-slate-700 mb-1">메모 <span class="text-slate-400 font-normal">(선택)</span></label>
+        <textarea
+          id="scheduleMemoInput"
+          rows="3"
+          placeholder="상세 메모를 입력하세요"
+          class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:border-blue-500 outline-none text-sm font-medium resize-none"
+        ></textarea>
+      </div>
+
+      <div>
+        <label id="scheduleActorLabel" for="scheduleActorInput" class="block text-xs font-bold text-slate-700 mb-1">작성자</label>
+        <input
+          id="scheduleActorInput"
+          type="text"
+          placeholder="이름 입력"
+          class="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:border-blue-500 outline-none text-sm font-bold"
+        />
+      </div>
+
+      <p id="scheduleFormError" class="hidden text-xs font-bold text-red-600"></p>
+
+      <div class="flex items-center justify-end gap-2 pt-1">
+        <button
+          id="scheduleCancelBtn"
+          type="button"
+          class="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-extrabold cursor-pointer transition"
+        >
+          취소
+        </button>
+        <button
+          type="submit"
+          class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold cursor-pointer transition"
+        >
+          저장
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- 공통 인앱 확인 모달 (window.confirm / alert 대체) -->
+  <div id="confirmModal" class="hidden fixed inset-0 z-[60] bg-slate-900/55 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="w-full max-w-[380px] bg-white rounded-3xl shadow-2xl border border-slate-200 p-5 space-y-4">
+      <h3 id="confirmModalTitle" class="text-base font-extrabold text-slate-900">확인</h3>
+      <p id="confirmModalMessage" class="text-sm text-slate-600 font-medium leading-relaxed whitespace-pre-line"></p>
+      <div class="flex items-center justify-end gap-2 pt-1">
+        <button
+          id="confirmModalCancelBtn"
+          type="button"
+          class="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-extrabold cursor-pointer transition"
+        >
+          취소
+        </button>
+        <button
+          id="confirmModalOkBtn"
+          type="button"
+          class="px-4 py-2 rounded-xl bg-[#B30E2A] hover:bg-[#960B22] text-white text-xs font-extrabold cursor-pointer transition"
+        >
+          확인
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // =========================================================
+      // 1. 상수 및 Firebase Firestore 연결 설정
+      // =========================================================
+      const AUTO_LOGIN_KEY = 'minsok_auto_login_user_v4';
+      const SESSION_LOGIN_KEY = 'minsok_session_user_v4';
+      const MAX_ADMINS = 5;
+      const HISTORY_DAYS = 7;
+
+      const firebaseConfig = {
+        apiKey: "AIzaSyDw1ovHdCcr3ttVwZdIjoZXOpDglovF7M4",
+        authDomain: "minsok-d0af1.firebaseapp.com",
+        databaseURL: "https://minsok-d0af1-default-rtdb.firebaseio.com",
+        projectId: "minsok-d0af1",
+        storageBucket: "minsok-d0af1.firebasestorage.app",
+        messagingSenderId: "550878479382",
+        appId: "1:550878479382:web:ef402a104ca7b6c9f1a137",
+        measurementId: "G-XE0KHJRQSN"
+      };
+
+      let db = null;
+      let analytics = null;
+      try {
+        if (typeof firebase !== 'undefined') {
+          const fbApp = firebase.apps && firebase.apps.length > 0
+            ? firebase.app()
+            : firebase.initializeApp(firebaseConfig);
+          db = firebase.firestore(fbApp);
+          try {
+            if (typeof firebase.analytics === 'function') {
+              if (typeof firebase.analytics.isSupported === 'function') {
+                firebase.analytics.isSupported().then(function (supported) {
+                  if (supported) {
+                    try { analytics = firebase.analytics(fbApp); } catch (e) {}
+                  }
+                }).catch(function () {});
+              } else {
+                analytics = firebase.analytics(fbApp);
+              }
+            }
+          } catch (analyticsErr) {
+            // 미리보기/iframe 환경 Analytics 미지원 무시
+          }
+        }
+      } catch (fbInitErr) {
+        console.error('Firebase 초기화 오류:', fbInitErr);
+      }
+
+      const COLLECTIONS = {
+        users: 'users',
+        bannedUsers: 'bannedUsers',
+        broadcasts: 'broadcasts',
+        calendarEvents: 'calendarEvents',
+        officePosts: 'officePosts',
+        fieldPosts: 'fieldPosts',
+        adminAlerts: 'adminAlerts'
+      };
+
+      function docIdFromName(name) {
+        return 'u_' + encodeURIComponent(String(name || '').trim());
+      }
+
+      const PARTS = ['냉동', '민속마감', '택배', '부위분리'];
+      const TARGET_PARTS = ['전체', '냉동', '민속마감', '택배', '부위분리'];
+
+      const PART_STYLES = {
+        '냉동': 'bg-sky-100 text-sky-800 border-sky-200',
+        '민속마감': 'bg-purple-100 text-purple-800 border-purple-200',
+        '택배': 'bg-amber-100 text-amber-800 border-amber-200',
+        '부위분리': 'bg-emerald-100 text-emerald-800 border-emerald-200'
+      };
+
+      const BASE_COLORS = [
+        '#2563EB', '#059669', '#EA580C', '#7C3AED',
+        '#DB2777', '#0D9488', '#D97706', '#4F46E5',
+        '#E11D48', '#0284C7', '#16A34A', '#9333EA'
+      ];
+
+      // =========================================================
+      // 2. 날짜 / 포맷 / 색상 / SVG 유틸리티
+      // =========================================================
+      function getDateKey(dateObj) {
+        const d = dateObj || new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      }
+
+      function parseDateKey(dateKey) {
+        const parts = String(dateKey).split('-').map(Number);
+        return new Date(parts[0], (parts[1] || 1) - 1, parts[2] || 1);
+      }
+
+      function getRecent7DateKeys() {
+        const keys = [];
+        const base = new Date();
+        for (let i = 0; i < HISTORY_DAYS; i++) {
+          const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() - i);
+          keys.push(getDateKey(d));
+        }
+        return keys;
+      }
+
+      const WEEKDAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
+
+      function formatFullDateKo(dateKey) {
+        const d = parseDateKey(dateKey);
+        return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEKDAYS_KO[d.getDay()]})`;
+      }
+
+      function formatShortTime(ts) {
+        const d = new Date(ts);
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      }
+
+      function formatMonthDayTime(ts) {
+        const d = new Date(ts);
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${mm}-${dd} ${formatShortTime(ts)}`;
+      }
+
+      function escapeHtml(text) {
+        return String(text == null ? '' : text)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function hexToRgba(hex, alpha) {
+        if (!hex || !hex.startsWith('#')) return `rgba(179, 14, 42, ${alpha})`;
+        const clean = hex.replace('#', '');
+        const r = parseInt(clean.substring(0, 2), 16);
+        const g = parseInt(clean.substring(2, 4), 16);
+        const b = parseInt(clean.substring(4, 6), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      }
+
+      function generateUserColor(existingUsers) {
+        const used = new Set((existingUsers || []).map((u) => u.color));
+        for (let i = 0; i < BASE_COLORS.length; i++) {
+          if (!used.has(BASE_COLORS[i])) return BASE_COLORS[i];
+        }
+        const idx = (existingUsers || []).length;
+        const hue = (idx * 137.508) % 360;
+        return `hsl(${Math.round(hue)}, 68%, 42%)`;
+      }
+
+      function renderPartBadgeHtml(part) {
+        if (!part) return '';
+        const cls = PART_STYLES[part] || 'bg-slate-100 text-slate-700 border-slate-200';
+        return `<span class="inline-flex items-center px-1.5 py-0.5 rounded-md border text-[10px] font-extrabold leading-none shrink-0 whitespace-nowrap ${cls}">${escapeHtml(part)}</span>`;
+      }
+
+      function createMinsokLogoSvg(size) {
+        const s = size || 54;
+        return `
+          <svg width="${s}" height="${s}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label="民俗 로고">
+            <defs>
+              <filter id="brushTex_${s}" x="-5%" y="-5%" width="110%" height="110%">
+                <feTurbulence type="fractalNoise" baseFrequency="0.065" numOctaves="3" result="noise" />
+                <feDisplacementMap in="SourceGraphic" in2="noise" scale="3.2" xChannelSelector="R" yChannelSelector="G" />
+              </filter>
+            </defs>
+            <rect x="4" y="4" width="92" height="92" rx="18" fill="#B30E2A" filter="url(#brushTex_${s})" />
+            <rect x="9" y="9" width="82" height="82" rx="13" fill="none" stroke="rgba(255,255,255,0.28)" stroke-width="2" />
+            <text x="50" y="62" text-anchor="middle" fill="#FFFFFF" font-family="'Noto Sans KR', 'Batang', serif" font-size="37" font-weight="900" letter-spacing="1">民俗</text>
+          </svg>
+        `;
+      }
+
+      let cachedLogoDataUrl = null;
+      function getNotificationIconUrl() {
+        if (cachedLogoDataUrl) return cachedLogoDataUrl;
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 192;
+          canvas.height = 192;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return undefined;
+          ctx.fillStyle = '#B30E2A';
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(8, 8, 176, 176, 36);
+          } else {
+            ctx.rect(8, 8, 176, 176);
+          }
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+          ctx.lineWidth = 4;
+          ctx.stroke();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = 'bold 74px "Noto Sans KR", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('民俗', 96, 102);
+          cachedLogoDataUrl = canvas.toDataURL('image/png');
+          return cachedLogoDataUrl;
+        } catch (e) {
+          return undefined;
+        }
+      }
+
+      // =========================================================
+      // 3. 전역 상태
+      // =========================================================
+      const todayInitial = getDateKey();
+      const nowDate = new Date();
+
+      const state = {
+        users: [],
+        bannedNames: [],
+        noticesByDate: {},
+        calendarSchedules: {},
+        officePostsByDate: {},
+        fieldReportsByDate: {},
+        pendingPartOffAlerts: [],
+
+        currentUserName: null,
+        activeTab: 'officeField', // 'officeField' | 'field'
+
+        // 캘린더 상태
+        calViewYear: nowDate.getFullYear(),
+        calViewMonth: nowDate.getMonth(),
+        selectedCalDate: todayInitial,
+        viewingSchedule: null,
+        editingSchedule: null,
+
+        // [현장] 탭 상태
+        selectedNoticeDate: todayInitial,
+        composeType: 'normal', // 'normal' | 'urgent'
+        composeTargetPart: '전체',
+        noticeFilter: 'all', // 'all' | 'unread' | 'urgent'
+        expandedNoticeIds: new Set(),
+
+        // 확인 모달 콜백
+        confirmCallback: null
+      };
+
+      const activeNotificationsMap = {};
+      let pushBannerTimer = null;
+      let toastTimer = null;
+      let audioCtx = null;
+      let lastKnownTodayKey = todayInitial;
+
+      // Firestore 실시간 동기화 상태 추적
+      const firestoreReady = { users: false, banned: false };
+      let initialSessionRestored = false;
+      let broadcastsInitialized = false;
+      const knownBroadcastIds = new Set();
+      const knownRemindMap = {};
+
+      // =========================================================
+      // 4. Firestore 실시간 연동 (onSnapshot)
+      // =========================================================
+      function handleUsersOrBannedSync() {
+        if (!firestoreReady.users || !firestoreReady.banned) return;
+
+        if (!initialSessionRestored) {
+          initialSessionRestored = true;
+          restoreLoginSession();
+          renderApp();
+          return;
+        }
+
+        if (state.currentUserName) {
+          const me = getUserByName(state.currentUserName);
+          if (!me || state.bannedNames.includes(state.currentUserName)) {
+            clearLoginSession();
+            closeAdminModal();
+            renderApp();
+            showToast('계정이 삭제되었거나 차단되어 로그아웃되었습니다.');
+            return;
+          }
+        }
+
+        renderApp();
+        const adminModal = document.getElementById('adminModal');
+        if (adminModal && !adminModal.classList.contains('hidden')) {
+          renderAdminModalList();
+        }
+      }
+
+      function initFirestoreListeners() {
+        if (!db) {
+          showToast('Firestore 연결에 실패했습니다. 네트워크 상태를 확인해 주세요.');
+          return;
+        }
+
+        // 1. 회원 목록 실시간 동기화
+        db.collection(COLLECTIONS.users).onSnapshot(function (snapshot) {
+          const list = [];
+          snapshot.forEach(function (doc) {
+            const data = doc.data();
+            if (data && data.name) list.push(data);
+          });
+          list.sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
+          state.users = list;
+          firestoreReady.users = true;
+          handleUsersOrBannedSync();
+        }, function (err) {
+          console.error('users onSnapshot 오류:', err);
+          showToast('회원 데이터 동기화 중 오류가 발생했습니다.');
+        });
+
+        // 2. 강퇴 차단 목록 실시간 동기화
+        db.collection(COLLECTIONS.bannedUsers).onSnapshot(function (snapshot) {
+          const names = [];
+          snapshot.forEach(function (doc) {
+            const data = doc.data();
+            if (data && data.name) names.push(data.name);
+          });
+          state.bannedNames = names;
+          firestoreReady.banned = true;
+          handleUsersOrBannedSync();
+        }, function (err) {
+          console.error('bannedUsers onSnapshot 오류:', err);
+        });
+
+        // 3. [현장] 공지/전파 목록 실시간 동기화
+        db.collection(COLLECTIONS.broadcasts).onSnapshot(function (snapshot) {
+          const validDates = new Set(getRecent7DateKeys());
+          const todayKey = getDateKey();
+          const grouped = {};
+          const expiredDocIds = [];
+          const incomingNotices = [];
+          const incomingReminders = [];
+
+          snapshot.forEach(function (doc) {
+            const data = doc.data();
+            if (!data || !data.id) return;
+            const dKey = data.dateKey || getDateKey(new Date(data.createdAt || Date.now()));
+
+            if (!validDates.has(dKey)) {
+              expiredDocIds.push(doc.id);
+              return;
+            }
+
+            if (!grouped[dKey]) grouped[dKey] = [];
+            grouped[dKey].push(data);
+
+            const prevRemind = knownRemindMap[data.id] || 0;
+            const curRemind = data.lastRemindedAt || 0;
+
+            if (!broadcastsInitialized) {
+              knownBroadcastIds.add(data.id);
+              if (curRemind > 0) knownRemindMap[data.id] = curRemind;
+            } else {
+              if (!knownBroadcastIds.has(data.id)) {
+                knownBroadcastIds.add(data.id);
+                if (dKey === todayKey) {
+                  incomingNotices.push(data);
+                }
+              } else if (curRemind > prevRemind && dKey === todayKey) {
+                incomingReminders.push(data);
+              }
+              if (curRemind > prevRemind) {
+                knownRemindMap[data.id] = curRemind;
+              }
+            }
+          });
+
+          broadcastsInitialized = true;
+          state.noticesByDate = grouped;
+
+          if (expiredDocIds.length > 0) {
+            expiredDocIds.forEach(function (docId) {
+              db.collection(COLLECTIONS.broadcasts).doc(docId).delete().catch(function () {});
+            });
+          }
+
+          const me = getCurrentUser();
+          if (me) {
+            renderFieldTab(me);
+
+            incomingNotices.forEach(function (ntc) {
+              if (ntc.authorName !== me.name) {
+                playAlertSound(!!ntc.isUrgent);
+                triggerVibration(!!ntc.isUrgent);
+                showPushBanner(ntc);
+                sendOsNotification(ntc);
+              }
+            });
+
+            incomingReminders.forEach(function (ntc) {
+              const confirmed = Array.isArray(ntc.confirmedBy) ? ntc.confirmedBy : [];
+              if (!confirmed.includes(me.name)) {
+                const remindPayload = Object.assign({}, ntc, {
+                  content: '[재알림] ' + ntc.content,
+                  isUrgent: true
+                });
+                playAlertSound(true);
+                triggerVibration(true);
+                showPushBanner(remindPayload);
+                sendOsNotification(remindPayload);
+              }
+            });
+          }
+        }, function (err) {
+          console.error('broadcasts onSnapshot 오류:', err);
+        });
+
+        // 4. [사무실&현장] 캘린더 일정 실시간 동기화
+        db.collection(COLLECTIONS.calendarEvents).onSnapshot(function (snapshot) {
+          const grouped = {};
+          snapshot.forEach(function (doc) {
+            const data = doc.data();
+            if (!data || !data.id || !data.dateKey) return;
+            if (!grouped[data.dateKey]) grouped[data.dateKey] = [];
+            grouped[data.dateKey].push(data);
+          });
+          Object.keys(grouped).forEach(function (k) {
+            grouped[k].sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
+          });
+          state.calendarSchedules = grouped;
+          const me = getCurrentUser();
+          if (me) renderCalendar();
+        }, function (err) {
+          console.error('calendarEvents onSnapshot 오류:', err);
+        });
+
+        // 5. [사무실&현장] 사무실 전달 사항 실시간 동기화
+        db.collection(COLLECTIONS.officePosts).onSnapshot(function (snapshot) {
+          const grouped = {};
+          snapshot.forEach(function (doc) {
+            const data = doc.data();
+            if (!data || !data.id || !data.dateKey) return;
+            if (!grouped[data.dateKey]) grouped[data.dateKey] = [];
+            grouped[data.dateKey].push(data);
+          });
+          state.officePostsByDate = grouped;
+          const me = getCurrentUser();
+          if (me) renderOfficeFieldTab(me);
+        }, function (err) {
+          console.error('officePosts onSnapshot 오류:', err);
+        });
+
+        // 6. [사무실&현장] 현장 보고 사항 실시간 동기화
+        db.collection(COLLECTIONS.fieldPosts).onSnapshot(function (snapshot) {
+          const grouped = {};
+          snapshot.forEach(function (doc) {
+            const data = doc.data();
+            if (!data || !data.id || !data.dateKey) return;
+            if (!grouped[data.dateKey]) grouped[data.dateKey] = [];
+            grouped[data.dateKey].push(data);
+          });
+          state.fieldReportsByDate = grouped;
+          const me = getCurrentUser();
+          if (me) renderOfficeFieldTab(me);
+        }, function (err) {
+          console.error('fieldPosts onSnapshot 오류:', err);
+        });
+
+        // 7. 파트 담당자 휴무 전환 관리자 알림 실시간 동기화
+        db.collection(COLLECTIONS.adminAlerts).onSnapshot(function (snapshot) {
+          const alerts = [];
+          snapshot.forEach(function (doc) {
+            const data = doc.data();
+            if (data && data.id) alerts.push(data);
+          });
+          alerts.sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
+          state.pendingPartOffAlerts = alerts;
+          checkPendingPartOffAlerts();
+        }, function (err) {
+          console.error('adminAlerts onSnapshot 오류:', err);
+        });
+      }
+
+      function pruneOldNotices() {
+        const validSet = new Set(getRecent7DateKeys());
+        Object.keys(state.noticesByDate).forEach(function (k) {
+          if (!validSet.has(k)) {
+            const expiredList = state.noticesByDate[k] || [];
+            if (db) {
+              expiredList.forEach(function (item) {
+                if (item && item.id) {
+                  db.collection(COLLECTIONS.broadcasts).doc(item.id).delete().catch(function () {});
+                }
+              });
+            }
+            delete state.noticesByDate[k];
+          }
+        });
+      }
+
+      // =========================================================
+      // 5. 세션 관리 (자동 로그인만 브라우저 스토리지 유지)
+      // =========================================================
+      function getCurrentUser() {
+        if (!state.currentUserName) return null;
+        return state.users.find((u) => u.name === state.currentUserName) || null;
+      }
+
+      function getUserByName(name) {
+        return state.users.find((u) => u.name === name) || null;
+      }
+
+      function restoreLoginSession() {
+        try {
+          const autoName = localStorage.getItem(AUTO_LOGIN_KEY);
+          const sessionName = sessionStorage.getItem(SESSION_LOGIN_KEY);
+          const candidate = autoName || sessionName;
+          if (candidate) {
+            const user = getUserByName(candidate);
+            if (user && !state.bannedNames.includes(user.name)) {
+              state.currentUserName = user.name;
+              return;
+            }
+            clearLoginSession();
+          }
+        } catch (e) {
+          // ignore
+        }
+        state.currentUserName = null;
+      }
+
+      function persistLoginSession(userName, autoLogin) {
+        state.currentUserName = userName;
+        try {
+          if (autoLogin) {
+            localStorage.setItem(AUTO_LOGIN_KEY, userName);
+            sessionStorage.removeItem(SESSION_LOGIN_KEY);
+          } else {
+            sessionStorage.setItem(SESSION_LOGIN_KEY, userName);
+            localStorage.removeItem(AUTO_LOGIN_KEY);
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      function clearLoginSession() {
+        state.currentUserName = null;
+        try {
+          localStorage.removeItem(AUTO_LOGIN_KEY);
+          sessionStorage.removeItem(SESSION_LOGIN_KEY);
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      // =========================================================
+      // 6. 알림, 소리, 진동, 배지, 토스트 (미리보기 오류 방지 try-catch)
+      // =========================================================
+      function isUserWorking() {
+        const me = getCurrentUser();
+        return !!(me && me.workStatus !== 'off');
+      }
+
+      function showToast(msg) {
+        const toast = document.getElementById('toast');
+        const msgEl = document.getElementById('toastMessage');
+        if (!toast || !msgEl) return;
+        clearTimeout(toastTimer);
+        msgEl.textContent = msg;
+        toast.classList.remove('hidden', 'popup-animate');
+        void toast.offsetWidth;
+        toast.classList.add('popup-animate');
+        toastTimer = setTimeout(function () {
+          toast.classList.add('hidden');
+        }, 2800);
+      }
+
+      function showPushBanner(notice) {
+        if (!isUserWorking()) return;
+        const banner = document.getElementById('pushBanner');
+        const avatar = document.getElementById('pushBannerAvatar');
+        const urgentEl = document.getElementById('pushBannerUrgent');
+        const titleEl = document.getElementById('pushBannerTitle');
+        const bodyEl = document.getElementById('pushBannerBody');
+        if (!banner || !avatar || !titleEl || !bodyEl) return;
+
+        clearTimeout(pushBannerTimer);
+        const author = getUserByName(notice.authorName);
+        const color = (author && author.color) || notice.authorColor || '#B30E2A';
+
+        banner.dataset.noticeId = notice.id || '';
+        avatar.style.backgroundColor = color;
+        avatar.textContent = (notice.authorName || '').slice(0, 3);
+        urgentEl.classList.toggle('hidden', !notice.isUrgent);
+
+        const targetSuffix = notice.targetPart && notice.targetPart !== '전체' ? ` [${notice.targetPart}]` : '';
+        titleEl.textContent = `${notice.authorName} · 민속 알림${targetSuffix}`;
+        bodyEl.textContent = notice.content || '';
+
+        banner.classList.remove('hidden', 'popup-animate');
+        void banner.offsetWidth;
+        banner.classList.add('popup-animate');
+
+        pushBannerTimer = setTimeout(function () {
+          banner.classList.add('hidden');
+        }, notice.isUrgent ? 6500 : 4500);
+      }
+
+      function playAlertSound(isUrgent) {
+        if (!isUserWorking()) return;
+        try {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContextClass) return;
+          if (!audioCtx) audioCtx = new AudioContextClass();
+          if (audioCtx.state === 'suspended') audioCtx.resume();
+
+          const now = audioCtx.currentTime;
+          if (isUrgent) {
+            [0, 0.16, 0.32].forEach(function (offset) {
+              const osc = audioCtx.createOscillator();
+              const gain = audioCtx.createGain();
+              osc.type = 'triangle';
+              osc.frequency.setValueAtTime(980, now + offset);
+              osc.frequency.setValueAtTime(1240, now + offset + 0.06);
+              gain.gain.setValueAtTime(0.001, now + offset);
+              gain.gain.exponentialRampToValueAtTime(0.18, now + offset + 0.015);
+              gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.13);
+              osc.connect(gain);
+              gain.connect(audioCtx.destination);
+              osc.start(now + offset);
+              osc.stop(now + offset + 0.14);
+            });
+          } else {
+            [587.33, 880].forEach(function (freq, idx) {
+              const osc = audioCtx.createOscillator();
+              const gain = audioCtx.createGain();
+              osc.type = 'sine';
+              const start = now + idx * 0.11;
+              osc.frequency.setValueAtTime(freq, start);
+              gain.gain.setValueAtTime(0.001, start);
+              gain.gain.exponentialRampToValueAtTime(0.12, start + 0.02);
+              gain.gain.exponentialRampToValueAtTime(0.001, start + 0.22);
+              osc.connect(gain);
+              gain.connect(audioCtx.destination);
+              osc.start(start);
+              osc.stop(start + 0.24);
+            });
+          }
+        } catch (e) {
+          // 오디오 재생 제한 환경 무시
+        }
+      }
+
+      function triggerVibration(isUrgent) {
+        if (!isUserWorking()) return;
+        try {
+          if (navigator && typeof navigator.vibrate === 'function') {
+            navigator.vibrate(isUrgent ? [220, 100, 220, 100, 280] : [160]);
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      function sendOsNotification(notice) {
+        if (!isUserWorking()) return;
+        try {
+          if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+          const iconUrl = getNotificationIconUrl();
+          const title = (notice.isUrgent ? '[긴급] ' : '') + `${notice.authorName} · 민속 알림`;
+          const n = new Notification(title, {
+            body: notice.content || '',
+            icon: iconUrl,
+            badge: iconUrl,
+            tag: notice.id || 'minsok-notice',
+            requireInteraction: true
+          });
+          if (notice.id) {
+            activeNotificationsMap[notice.id] = n;
+          }
+          n.onclick = function () {
+            try { window.focus(); } catch (e) {}
+            if (notice.id) {
+              state.activeTab = 'field';
+              state.selectedNoticeDate = getDateKey();
+              renderMainApp();
+              scrollToNoticeCard(notice.id);
+            }
+          };
+        } catch (e) {
+          // 미리보기/iframe 보안 오류 방지
+        }
+      }
+
+      function closeOsNotification(noticeId) {
+        try {
+          if (activeNotificationsMap[noticeId]) {
+            activeNotificationsMap[noticeId].close();
+            delete activeNotificationsMap[noticeId];
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      function updateAppBadge(unreadCount) {
+        try {
+          document.title = unreadCount > 0 ? `(${unreadCount}) 민속 알림` : '민속 알림 - 현장 전원 실시간 알림 앱';
+          if (navigator && typeof navigator.setAppBadge === 'function') {
+            if (unreadCount > 0) {
+              navigator.setAppBadge(unreadCount).catch(function () {});
+            } else if (typeof navigator.clearAppBadge === 'function') {
+              navigator.clearAppBadge().catch(function () {});
+            }
+          }
+        } catch (e) {
+          // Badging API 미지원/미리보기 환경 무시
+        }
+      }
+
+      function scrollToNoticeCard(noticeId) {
+        setTimeout(function () {
+          const card = document.querySelector(`[data-notice-card-id="${noticeId}"]`);
+          if (card) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            card.classList.remove('notice-highlight');
+            void card.offsetWidth;
+            card.classList.add('notice-highlight');
+          }
+        }, 80);
+      }
+
+      // =========================================================
+      // 7. 확인 모달 & 파트 휴무 관리자 알림 체크
+      // =========================================================
+      function openConfirmModal(opts) {
+        const modal = document.getElementById('confirmModal');
+        document.getElementById('confirmModalTitle').textContent = opts.title || '확인';
+        document.getElementById('confirmModalMessage').textContent = opts.message || '';
+        document.getElementById('confirmModalOkBtn').textContent = opts.okText || '확인';
+        document.getElementById('confirmModalCancelBtn').textContent = opts.cancelText || '취소';
+        state.confirmCallback = opts.onConfirm || null;
+        modal.classList.remove('hidden');
+      }
+
+      function closeConfirmModal() {
+        document.getElementById('confirmModal').classList.add('hidden');
+        state.confirmCallback = null;
+      }
+
+      function checkPendingPartOffAlerts() {
+        const user = getCurrentUser();
+        if (!user || !user.isAdmin) return;
+        const confirmModal = document.getElementById('confirmModal');
+        if (confirmModal && !confirmModal.classList.contains('hidden')) return;
+
+        const nextAlert = state.pendingPartOffAlerts.find(function (a) {
+          const dismissed = Array.isArray(a.dismissedBy) ? a.dismissedBy : [];
+          return !dismissed.includes(user.name);
+        });
+        if (!nextAlert) return;
+
+        // 즉시 읽음 표시해 중복 팝업 방지 (Firestore 동기화)
+        if (!Array.isArray(nextAlert.dismissedBy)) nextAlert.dismissedBy = [];
+        nextAlert.dismissedBy.push(user.name);
+        if (db) {
+          db.collection(COLLECTIONS.adminAlerts).doc(nextAlert.id).update({
+            dismissedBy: firebase.firestore.FieldValue.arrayUnion(user.name)
+          }).catch(function () {});
+        }
+
+        openConfirmModal({
+          title: '파트 담당자 휴무 알림',
+          message: `${nextAlert.userName}(${nextAlert.part})님이 휴무로 전환했습니다.\n다른 사람으로 파트를 지정하시겠습니까?`,
+          okText: '지정하기',
+          cancelText: '나중에',
+          onConfirm: function () {
+            openAdminModal();
+          }
+        });
+      }
+
+      // =========================================================
+      // 8. 렌더링 로직 (앱 전체 / 헤더 / 탭 / 캘린더 / 현장)
+      // =========================================================
+      function renderApp() {
+        const user = getCurrentUser();
+        const authView = document.getElementById('authView');
+        const appView = document.getElementById('appView');
+
+        if (!user) {
+          authView.classList.remove('hidden');
+          appView.classList.add('hidden');
+          updateAppBadge(0);
+          return;
+        }
+
+        authView.classList.add('hidden');
+        appView.classList.remove('hidden');
+        renderMainApp();
+        checkPendingPartOffAlerts();
+      }
+
+      function renderMainApp() {
+        const user = getCurrentUser();
+        if (!user) return;
+        renderHeader(user);
+        renderTabUI();
+        renderOfficeFieldTab(user);
+        renderFieldTab(user);
+      }
+
+      function renderHeader(user) {
+        // 사용자 배지
+        const badge = document.getElementById('currentUserBadge');
+        badge.innerHTML = `
+          <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color:${escapeHtml(user.color || '#B30E2A')};"></span>
+          <span>${escapeHtml(user.name)}</span>
+          ${renderPartBadgeHtml(user.part)}
+        `;
+
+        // 근무 중 / 휴무(연차) 토글
+        const workBtn = document.getElementById('workStatusToggleBtn');
+        if (user.workStatus === 'off') {
+          workBtn.className = 'px-2.5 py-1.5 rounded-xl text-xs font-extrabold border transition cursor-pointer whitespace-nowrap flex items-center gap-1 bg-slate-100 border-slate-300 text-slate-500 hover:bg-slate-200';
+          workBtn.innerHTML = '<span>🌙</span><span>휴무(알림 OFF)</span>';
+        } else {
+          workBtn.className = 'px-2.5 py-1.5 rounded-xl text-xs font-extrabold border transition cursor-pointer whitespace-nowrap flex items-center gap-1 bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100';
+          workBtn.innerHTML = '<span>🟢</span><span>근무 중</span>';
+        }
+
+        // 관리자 버튼 (관리자만 표시)
+        const adminBtn = document.getElementById('openAdminBtn');
+        const adminCount = state.users.filter((u) => u.isAdmin).length;
+        if (user.isAdmin) {
+          adminBtn.classList.remove('hidden');
+          adminBtn.textContent = `관리자 ${adminCount}/${MAX_ADMINS}`;
+        } else {
+          adminBtn.classList.add('hidden');
+        }
+      }
+
+      function renderTabUI() {
+        const isOffice = state.activeTab === 'officeField';
+        const officePanel = document.getElementById('officeFieldTabPanel');
+        const fieldPanel = document.getElementById('fieldTabPanel');
+        const dateHistoryWrapper = document.getElementById('dateHistoryWrapper');
+
+        const headerInner = document.getElementById('headerInner');
+        const mainContainer = document.getElementById('mainContentContainer');
+        const bottomTabInner = document.getElementById('bottomTabInner');
+
+        const tabOfficeBtn = document.getElementById('tabOfficeFieldBtn');
+        const tabFieldBtn = document.getElementById('tabFieldBtn');
+
+        if (isOffice) {
+          officePanel.classList.remove('hidden', 'tab-section-hidden');
+          fieldPanel.classList.add('hidden', 'tab-section-hidden');
+          dateHistoryWrapper.classList.add('hidden');
+
+          headerInner.classList.add('pc-wide-container');
+          headerInner.classList.remove('md:max-w-[840px]');
+          mainContainer.classList.add('pc-wide-container', 'pc-office-main');
+          mainContainer.classList.remove('md:max-w-[840px]');
+          bottomTabInner.classList.add('pc-wide-container');
+          bottomTabInner.classList.remove('md:max-w-[840px]');
+
+          tabOfficeBtn.className = 'flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-[#B30E2A] text-white shadow-sm';
+          tabFieldBtn.className = 'relative flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600';
+        } else {
+          officePanel.classList.add('hidden', 'tab-section-hidden');
+          fieldPanel.classList.remove('hidden', 'tab-section-hidden');
+          dateHistoryWrapper.classList.remove('hidden');
+
+          headerInner.classList.remove('pc-wide-container');
+          headerInner.classList.add('md:max-w-[840px]');
+          mainContainer.classList.remove('pc-wide-container', 'pc-office-main');
+          mainContainer.classList.add('md:max-w-[840px]');
+          bottomTabInner.classList.remove('pc-wide-container');
+          bottomTabInner.classList.add('md:max-w-[840px]');
+
+          tabFieldBtn.className = 'relative flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-[#B30E2A] text-white shadow-sm';
+          tabOfficeBtn.className = 'flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600';
+        }
+      }
+
+      // ---------------------------------------------------------
+      // 탭 1: [사무실&현장] 월간 캘린더 + 사무실/현장 소통 렌더링
+      // ---------------------------------------------------------
+      function renderOfficeFieldTab(user) {
+        renderCalendar();
+        renderOfficeAndFieldPosts(user);
+      }
+
+      function renderCalendar() {
+        const year = state.calViewYear;
+        const month = state.calViewMonth;
+        const todayKey = getDateKey();
+
+        document.getElementById('calMonthTitle').textContent = `${year}년 ${month + 1}월`;
+
+        const firstDayOfMonth = new Date(year, month, 1);
+        const startWeekday = firstDayOfMonth.getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const totalCells = Math.ceil((startWeekday + daysInMonth) / 7) * 7;
+        const rowCount = totalCells / 7;
+
+        const grid = document.getElementById('calendarGrid');
+        grid.style.setProperty('--cal-rows', String(rowCount));
+
+        let html = '';
+        for (let i = 0; i < totalCells; i++) {
+          const cellDate = new Date(year, month, 1 - startWeekday + i);
+          const cellKey = getDateKey(cellDate);
+          const isCurrentMonth = cellDate.getMonth() === month;
+          const isToday = cellKey === todayKey;
+          const isSelected = cellKey === state.selectedCalDate;
+          const dayOfWeek = cellDate.getDay();
+
+          const schedules = state.calendarSchedules[cellKey] || [];
+          const officeCount = (state.officePostsByDate[cellKey] || []).length;
+          const fieldCount = (state.fieldReportsByDate[cellKey] || []).length;
+
+          let dayNumColor = isCurrentMonth ? 'text-slate-800' : 'text-slate-300';
+          if (isCurrentMonth && dayOfWeek === 0) dayNumColor = 'text-red-500';
+          if (isCurrentMonth && dayOfWeek === 6) dayNumColor = 'text-blue-600';
+
+          const dayNumHtml = isToday
+            ? `<span class="cal-day-num-today inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-extrabold">${cellDate.getDate()}</span>`
+            : `<span class="cal-day-num text-xs font-bold ${dayNumColor}">${cellDate.getDate()}</span>`;
+
+          const schedulesHtml = schedules.map(function (sch) {
+            const timePrefix = sch.time ? `${sch.time} ` : '';
+            const hasMemoIcon = sch.memo ? '<span class="cal-schedule-icon shrink-0 text-[9px] ml-0.5">📝</span>' : '';
+            return `
+              <div
+                data-schedule-click="${escapeHtml(sch.id)}"
+                data-schedule-date="${escapeHtml(cellKey)}"
+                class="cal-schedule-item mt-0.5 px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 border border-blue-200/70 text-[10px] font-bold text-blue-900 leading-tight cursor-pointer flex items-start justify-between gap-0.5 transition"
+              >
+                <span class="cal-schedule-text break-all line-clamp-2">${escapeHtml(timePrefix + sch.title)}</span>
+                ${hasMemoIcon}
+              </div>
+            `;
+          }).join('');
+
+          const badgesHtml = (officeCount > 0 || fieldCount > 0)
+            ? `
+              <div class="mt-1 flex flex-wrap gap-0.5">
+                ${officeCount > 0 ? `<span class="cal-count-badge px-1 py-0.5 rounded bg-blue-50 text-blue-700 text-[9px] font-extrabold leading-none">사무실 ${officeCount}</span>` : ''}
+                ${fieldCount > 0 ? `<span class="cal-count-badge px-1 py-0.5 rounded bg-amber-50 text-amber-700 text-[9px] font-extrabold leading-none">현장 ${fieldCount}</span>` : ''}
+              </div>
+            `
+            : '';
+
+          const selectedRing = isSelected
+            ? 'ring-2 ring-inset ring-blue-600 bg-blue-50/35 z-10'
+            : (isCurrentMonth ? 'bg-white hover:bg-slate-50/80' : 'bg-slate-50/40 hover:bg-slate-50');
+
+          html += `
+            <div
+              data-cal-date="${cellKey}"
+              class="cal-day-cell relative min-h-[78px] p-1 border-r border-b border-slate-100 cursor-pointer transition flex flex-col justify-between ${selectedRing}"
+            >
+              <div class="cal-schedule-wrap min-w-0">
+                <div class="flex items-center justify-between">${dayNumHtml}</div>
+                ${schedulesHtml}
+              </div>
+              ${badgesHtml}
+            </div>
+          `;
+        }
+
+        grid.innerHTML = html;
+      }
+
+      function renderOfficeAndFieldPosts(user) {
+        const selectedKey = state.selectedCalDate;
+        const todayKey = getDateKey();
+        const isToday = selectedKey === todayKey;
+        const isPast = selectedKey < todayKey;
+        const fullDateLabel = formatFullDateKo(selectedKey);
+
+        // --- 사무실 전달 사항 ---
+        document.getElementById('officeDateTitle').textContent = fullDateLabel;
+        const rawOfficePosts = (state.officePostsByDate[selectedKey] || []).slice();
+        // 미확인 상단 고정(최신순), 확인 완료 하단(최신순)
+        rawOfficePosts.sort(function (a, b) {
+          const aDone = a.confirmedBy ? 1 : 0;
+          const bDone = b.confirmedBy ? 1 : 0;
+          if (aDone !== bDone) return aDone - bDone;
+          return (b.createdAt || 0) - (a.createdAt || 0);
+        });
+
+        const officeTotal = rawOfficePosts.length;
+        const officeConfirmedCount = rawOfficePosts.filter((p) => !!p.confirmedBy).length;
+        const allOfficeConfirmed = officeTotal > 0 && officeConfirmedCount === officeTotal;
+
+        document.getElementById('officeSummaryText').textContent = allOfficeConfirmed
+          ? `${officeTotal}건 · 모두 확인됨`
+          : `${officeTotal}건`;
+        document.getElementById('officeAllConfirmedBar').classList.toggle('hidden', !allOfficeConfirmed);
+
+        const officeListEl = document.getElementById('officePostList');
+        if (officeTotal === 0) {
+          officeListEl.innerHTML = '<p class="py-6 text-center text-xs font-medium text-slate-400">이 날짜에 등록된 사무실 전달 사항이 없습니다.</p>';
+        } else {
+          officeListEl.innerHTML = rawOfficePosts.map(function (post) {
+            const authorUser = getUserByName(post.authorName);
+            const authorPart = authorUser ? authorUser.part : '';
+            const confirmedUser = post.confirmedBy ? getUserByName(post.confirmedBy) : null;
+            const confirmedPart = confirmedUser ? confirmedUser.part : '';
+
+            let confirmHtml = '';
+            if (post.confirmedBy) {
+              confirmHtml = `
+                <div class="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold">
+                  <span>✅ 현장 확인</span>
+                  <span class="font-extrabold text-emerald-900">${escapeHtml(post.confirmedBy)}</span>
+                  ${renderPartBadgeHtml(confirmedPart)}
+                  <span class="text-emerald-600/80 font-medium">${escapeHtml(post.confirmedAtText || '')}</span>
+                </div>
+              `;
+            } else if (isToday) {
+              confirmHtml = `
+                <div class="mt-2">
+                  <button
+                    type="button"
+                    data-confirm-office-post="${escapeHtml(post.id)}"
+                    class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-[11px] font-extrabold shadow-xs cursor-pointer transition"
+                  >
+                    현장 확인 체크
+                  </button>
+                </div>
+              `;
+            } else {
+              confirmHtml = `
+                <div class="mt-2">
+                  <button
+                    type="button"
+                    disabled
+                    class="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-400 text-[11px] font-bold cursor-not-allowed"
+                  >
+                    현장 확인 체크 (오늘만 가능)
+                  </button>
+                </div>
+              `;
+            }
+
+            return `
+              <div class="py-3">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="text-xs font-extrabold text-slate-900">${escapeHtml(post.authorName)}</span>
+                  ${renderPartBadgeHtml(authorPart)}
+                  <span class="text-[11px] font-medium text-slate-400">${formatShortTime(post.createdAt)}</span>
+                </div>
+                <p class="text-xs sm:text-[13px] text-slate-800 font-medium mt-1 whitespace-pre-wrap break-words leading-relaxed">${escapeHtml(post.content)}</p>
+                ${confirmHtml}
+              </div>
+            `;
+          }).join('');
+        }
+
+        document.getElementById('officeAuthorLabel').textContent = `작성자: ${user.name}`;
+        document.getElementById('officeInputArea').classList.toggle('hidden', isPast);
+        document.getElementById('officePastLockedArea').classList.toggle('hidden', !isPast);
+
+        // --- 현장 보고 사항 ---
+        document.getElementById('fieldReportDateTitle').textContent = fullDateLabel;
+        const rawFieldPosts = (state.fieldReportsByDate[selectedKey] || []).slice();
+        rawFieldPosts.sort(function (a, b) {
+          const aDone = a.confirmedBy ? 1 : 0;
+          const bDone = b.confirmedBy ? 1 : 0;
+          if (aDone !== bDone) return aDone - bDone;
+          return (b.createdAt || 0) - (a.createdAt || 0);
+        });
+
+        document.getElementById('fieldReportSummaryText').textContent = `${rawFieldPosts.length}건`;
+        const fieldListEl = document.getElementById('fieldReportList');
+        if (rawFieldPosts.length === 0) {
+          fieldListEl.innerHTML = '<p class="py-6 text-center text-xs font-medium text-slate-400">이 날짜에 등록된 현장 보고 사항이 없습니다.</p>';
+        } else {
+          fieldListEl.innerHTML = rawFieldPosts.map(function (post) {
+            const authorUser = getUserByName(post.authorName);
+            const authorPart = authorUser ? authorUser.part : '';
+            const confirmedUser = post.confirmedBy ? getUserByName(post.confirmedBy) : null;
+            const confirmedPart = confirmedUser ? confirmedUser.part : '';
+
+            let confirmHtml = '';
+            if (post.confirmedBy) {
+              confirmHtml = `
+                <div class="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold">
+                  <span>✅ 확인 완료</span>
+                  <span class="font-extrabold text-emerald-900">${escapeHtml(post.confirmedBy)}</span>
+                  ${renderPartBadgeHtml(confirmedPart)}
+                  <span class="text-emerald-600/80 font-medium">${escapeHtml(post.confirmedAtText || '')}</span>
+                </div>
+              `;
+            } else if (isToday) {
+              confirmHtml = `
+                <div class="mt-2">
+                  <button
+                    type="button"
+                    data-confirm-field-report="${escapeHtml(post.id)}"
+                    class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-[11px] font-extrabold shadow-xs cursor-pointer transition"
+                  >
+                    확인 체크
+                  </button>
+                </div>
+              `;
+            }
+
+            return `
+              <div class="py-3">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="text-xs font-extrabold text-slate-900">${escapeHtml(post.authorName)}</span>
+                  ${renderPartBadgeHtml(authorPart)}
+                  <span class="text-[11px] font-medium text-slate-400">${formatShortTime(post.createdAt)}</span>
+                </div>
+                <p class="text-xs sm:text-[13px] text-slate-800 font-medium mt-1 whitespace-pre-wrap break-words leading-relaxed">${escapeHtml(post.content)}</p>
+                ${confirmHtml}
+              </div>
+            `;
+          }).join('');
+        }
+
+        document.getElementById('fieldReportAuthorLabel').textContent = `작성자: ${user.name}`;
+        document.getElementById('fieldReportInputArea').classList.toggle('hidden', isPast);
+        document.getElementById('fieldReportPastLockedArea').classList.toggle('hidden', !isPast);
+      }
+
+      // ---------------------------------------------------------
+      // 탭 2: [현장] 민속 알림 렌더링
+      // ---------------------------------------------------------
+      function renderFieldTab(user) {
+        const todayKey = getDateKey();
+        const recentKeys = getRecent7DateKeys();
+        if (!recentKeys.includes(state.selectedNoticeDate)) {
+          state.selectedNoticeDate = todayKey;
+        }
+        const isViewingToday = state.selectedNoticeDate === todayKey;
+
+        // 1. 7일 날짜 선택 바
+        const historyBar = document.getElementById('dateHistoryBar');
+        historyBar.innerHTML = recentKeys.map(function (dKey) {
+          const d = parseDateKey(dKey);
+          const count = (state.noticesByDate[dKey] || []).length;
+          const isSelected = dKey === state.selectedNoticeDate;
+          const label = dKey === todayKey ? '오늘' : `${d.getMonth() + 1}/${d.getDate()}(${WEEKDAYS_KO[d.getDay()]})`;
+          const cls = isSelected
+            ? 'bg-[#B30E2A] text-white border-[#B30E2A] shadow-xs'
+            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100';
+          return `
+            <button
+              type="button"
+              data-notice-date="${dKey}"
+              class="px-3 py-1.5 rounded-xl border text-xs font-extrabold whitespace-nowrap shrink-0 cursor-pointer transition ${cls}"
+            >
+              ${label}${count > 0 ? ` <span class="opacity-80">(${count})</span>` : ''}
+            </button>
+          `;
+        }).join('');
+
+        // 2. 오늘 기준 미확인 개수 계산 (배지 + 상단 고정 배너)
+        const todayNotices = (state.noticesByDate[todayKey] || []).slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        const unreadToday = todayNotices.filter(function (n) {
+          const confirmed = Array.isArray(n.confirmedBy) ? n.confirmedBy : [];
+          return !confirmed.includes(user.name);
+        });
+
+        const unreadBadge = document.getElementById('fieldTabUnreadBadge');
+        if (unreadToday.length > 0) {
+          unreadBadge.textContent = String(unreadToday.length);
+          unreadBadge.classList.remove('hidden');
+        } else {
+          unreadBadge.classList.add('hidden');
+        }
+        updateAppBadge(unreadToday.length);
+
+        const stickyBanner = document.getElementById('unreadStickyBanner');
+        if (unreadToday.length > 0 && isViewingToday) {
+          const firstUnread = unreadToday[0];
+          stickyBanner.classList.remove('hidden');
+          stickyBanner.dataset.noticeId = firstUnread.id;
+          document.getElementById('unreadBannerCount').textContent = `미확인 ${unreadToday.length}건`;
+          document.getElementById('unreadBannerSender').textContent = firstUnread.authorName;
+          document.getElementById('unreadBannerText').textContent = firstUnread.content;
+        } else {
+          stickyBanner.classList.add('hidden');
+        }
+
+        // 3. 과거 날짜 안내 및 작성 카드 토글
+        const pastBanner = document.getElementById('pastDateBanner');
+        const composerCard = document.getElementById('noticeComposerCard');
+        if (isViewingToday) {
+          pastBanner.classList.add('hidden');
+          composerCard.classList.remove('hidden');
+        } else {
+          pastBanner.classList.remove('hidden');
+          document.getElementById('pastDateBannerText').textContent = `${formatFullDateKo(state.selectedNoticeDate)} 기록 조회 중`;
+          composerCard.classList.add('hidden');
+        }
+
+        // 4. 전파 대상 파트 선택 버튼
+        const partSelector = document.getElementById('targetPartSelector');
+        partSelector.innerHTML = TARGET_PARTS.map(function (p) {
+          const active = state.composeTargetPart === p;
+          const cls = active
+            ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100';
+          return `
+            <button
+              type="button"
+              data-target-part="${p}"
+              class="px-2.5 py-1.5 rounded-xl border text-xs font-extrabold cursor-pointer transition whitespace-nowrap ${cls}"
+            >
+              ${p}
+            </button>
+          `;
+        }).join('');
+
+        document.getElementById('noticeTargetHint').textContent = state.composeTargetPart === '전체'
+          ? '전체 전원에게 전파됩니다.'
+          : `[${state.composeTargetPart}] 파트 대상으로 전파됩니다. (열람·확인 전원 가능)`;
+
+        // 5. 필터링 및 정렬 (미확인 상단 고정 최신순 -> 확인 완료 하단 최신순)
+        const allForDate = (state.noticesByDate[state.selectedNoticeDate] || []).slice();
+        const filtered = allForDate.filter(function (n) {
+          const confirmed = Array.isArray(n.confirmedBy) ? n.confirmedBy : [];
+          if (state.noticeFilter === 'unread') return !confirmed.includes(user.name);
+          if (state.noticeFilter === 'urgent') return !!n.isUrgent;
+          return true;
+        });
+
+        filtered.sort(function (a, b) {
+          const aConfirmed = Array.isArray(a.confirmedBy) && a.confirmedBy.includes(user.name) ? 1 : 0;
+          const bConfirmed = Array.isArray(b.confirmedBy) && b.confirmedBy.includes(user.name) ? 1 : 0;
+          if (aConfirmed !== bConfirmed) return aConfirmed - bConfirmed;
+          return (b.createdAt || 0) - (a.createdAt || 0);
+        });
+
+        document.getElementById('noticeCountSummary').textContent = `${filtered.length}건`;
+
+        const listEl = document.getElementById('noticeList');
+        if (filtered.length === 0) {
+          listEl.innerHTML = `
+            <div class="bg-white rounded-2xl border border-slate-200/80 py-12 px-4 text-center">
+              <p class="text-sm font-bold text-slate-400">표시할 알림이 없습니다.</p>
+            </div>
+          `;
+          return;
+        }
+
+        const totalMembers = state.users.length;
+        listEl.innerHTML = filtered.map(function (item) {
+          const authorUser = getUserByName(item.authorName);
+          const authorColor = (authorUser && authorUser.color) || item.authorColor || '#B30E2A';
+          const authorPart = authorUser ? authorUser.part : '';
+          const confirmedBy = Array.isArray(item.confirmedBy) ? item.confirmedBy : [];
+          const isConfirmedByMe = confirmedBy.includes(user.name);
+          const isMeAuthor = item.authorName === user.name;
+          const isExpanded = state.expandedNoticeIds.has(item.id);
+
+          const targetPart = item.targetPart || '전체';
+          const canPerformTask = targetPart === '전체' || user.part === targetPart;
+
+          // 처리자 정보
+          const handlerUser = item.handledBy ? getUserByName(item.handledBy) : null;
+          const handlerPart = handlerUser ? handlerUser.part : '';
+
+          const handledBadgeHtml = item.handledBy
+            ? `
+              <div class="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-extrabold">
+                <span>처리 완료: ${escapeHtml(item.handledBy)}</span>
+                ${renderPartBadgeHtml(handlerPart)}
+              </div>
+            `
+            : '';
+
+          // [업무 수행] 버튼 (확인했습니다 버튼 바로 왼쪽)
+          let taskBtnHtml = '';
+          if (item.handledBy) {
+            taskBtnHtml = `
+              <button
+                type="button"
+                disabled
+                class="px-3 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 text-xs font-extrabold cursor-not-allowed whitespace-nowrap"
+              >
+                처리 완료
+              </button>
+            `;
+          } else if (!isViewingToday) {
+            taskBtnHtml = '';
+          } else if (canPerformTask) {
+            taskBtnHtml = `
+              <button
+                type="button"
+                data-handle-notice="${escapeHtml(item.id)}"
+                class="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-white text-xs font-extrabold shadow-xs cursor-pointer transition whitespace-nowrap"
+              >
+                업무 수행
+              </button>
+            `;
+          } else {
+            taskBtnHtml = `
+              <button
+                type="button"
+                disabled
+                class="px-3 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 text-xs font-bold cursor-not-allowed whitespace-nowrap"
+              >
+                업무 수행 (${escapeHtml(targetPart)} 전용)
+              </button>
+            `;
+          }
+
+          // [확인했습니다] / [확인 완료] 버튼
+          let confirmBtnHtml = '';
+          if (!isConfirmedByMe && isViewingToday) {
+            confirmBtnHtml = `
+              <button
+                type="button"
+                data-confirm-notice="${escapeHtml(item.id)}"
+                class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-xs font-extrabold shadow-xs cursor-pointer transition whitespace-nowrap"
+              >
+                확인했습니다
+              </button>
+            `;
+          } else if (isConfirmedByMe) {
+            confirmBtnHtml = `
+              <span class="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-extrabold whitespace-nowrap">
+                ✓ 확인 완료
+              </span>
+            `;
+          }
+
+          // 확인 현황 펼치기 내용
+          const confirmedUsers = state.users.filter((u) => confirmedBy.includes(u.name));
+          const unconfirmedUsers = state.users.filter((u) => !confirmedBy.includes(u.name));
+          const canRemind = isViewingToday && unconfirmedUsers.length > 0 && (isMeAuthor || user.isAdmin);
+
+          const expandedHtml = isExpanded
+            ? `
+              <div class="mt-3 pt-3 border-t border-slate-200/70 space-y-2.5">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-[11px] font-extrabold text-slate-600">확인 완료 (${confirmedUsers.length}명)</span>
+                  ${canRemind ? `
+                    <button
+                      type="button"
+                      data-remind-notice="${escapeHtml(item.id)}"
+                      class="px-2.5 py-1 rounded-lg border border-[#B30E2A] bg-white hover:bg-red-50 text-[#B30E2A] text-[11px] font-extrabold cursor-pointer transition"
+                    >
+                      🔔 미확인자 재알림
+                    </button>
+                  ` : ''}
+                </div>
+                <div class="flex flex-wrap gap-1.5">
+                  ${confirmedUsers.length > 0
+                    ? confirmedUsers.map((u) => `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-slate-200 text-[11px] font-bold text-slate-700"><span class="w-2 h-2 rounded-full" style="background-color:${escapeHtml(u.color)};"></span>${escapeHtml(u.name)}${renderPartBadgeHtml(u.part)}</span>`).join('')
+                    : '<span class="text-xs text-slate-400">없음</span>'}
+                </div>
+                <div>
+                  <span class="block text-[11px] font-extrabold text-slate-400 mb-1.5">미확인 (${unconfirmedUsers.length}명)</span>
+                  <div class="flex flex-wrap gap-1.5">
+                    ${unconfirmedUsers.length > 0
+                      ? unconfirmedUsers.map((u) => `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200/80 text-[11px] font-semibold text-slate-500"><span class="w-2 h-2 rounded-full opacity-60" style="background-color:${escapeHtml(u.color)};"></span>${escapeHtml(u.name)}${renderPartBadgeHtml(u.part)}${u.workStatus === 'off' ? '<span class="text-[9px] text-slate-400">(휴무)</span>' : ''}</span>`).join('')
+                      : '<span class="text-xs font-bold text-emerald-600">전원 확인 완료!</span>'}
+                  </div>
+                </div>
+              </div>
+            `
+            : '';
+
+          return `
+            <article
+              data-notice-card-id="${escapeHtml(item.id)}"
+              style="border-left: 6px solid ${escapeHtml(authorColor)}; background-color: #FFFFFF; background-image: linear-gradient(0deg, ${hexToRgba(authorColor, 0.045)}, ${hexToRgba(authorColor, 0.045)});"
+              class="rounded-2xl border border-slate-200/90 shadow-sm p-4 transition"
+            >
+              <!-- 카드 상단: 44px 원형 프로필(3글자 전체 표시, 중복 이름 제거) + 메타 배지 -->
+              <div class="flex items-center justify-between gap-2 mb-3">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <div
+                    style="background-color:${escapeHtml(authorColor)};"
+                    class="w-11 h-11 rounded-full shrink-0 flex items-center justify-center text-white text-[11px] font-extrabold tracking-tighter whitespace-nowrap shadow-xs"
+                  >
+                    ${escapeHtml((item.authorName || '').slice(0, 3))}
+                  </div>
+                  <div class="flex items-center gap-1.5 flex-wrap min-w-0">
+                    ${isMeAuthor ? '<span class="px-1.5 py-0.5 rounded-md bg-slate-900 text-white text-[10px] font-extrabold">나</span>' : ''}
+                    ${renderPartBadgeHtml(authorPart)}
+                    ${targetPart !== '전체' ? `<span class="px-1.5 py-0.5 rounded-md bg-blue-600 text-white text-[10px] font-extrabold">대상: ${escapeHtml(targetPart)}</span>` : ''}
+                    <span class="text-[11px] font-semibold text-slate-500">${formatShortTime(item.createdAt)}</span>
+                  </div>
+                </div>
+                ${item.isUrgent ? '<span class="px-2 py-0.5 rounded-full bg-red-600 text-white text-[11px] font-extrabold shrink-0">🚨 긴급</span>' : ''}
+              </div>
+
+              <!-- 본문 -->
+              <p class="text-sm font-medium text-slate-800 whitespace-pre-wrap break-words leading-relaxed">${escapeHtml(item.content)}</p>
+
+              <!-- 업무 처리 완료 표시 -->
+              ${handledBadgeHtml}
+
+              <!-- 하단 액션 행 -->
+              <div class="mt-3.5 pt-3 border-t border-slate-200/60 flex items-center justify-between gap-2 flex-wrap">
+                <button
+                  type="button"
+                  data-toggle-confirm-list="${escapeHtml(item.id)}"
+                  class="text-xs font-extrabold text-slate-600 hover:text-slate-900 cursor-pointer py-1 transition"
+                >
+                  확인 ${confirmedBy.length}/${totalMembers}명 ${isExpanded ? '▴' : '▾'}
+                </button>
+                <div class="flex items-center gap-1.5 flex-wrap justify-end">
+                  ${taskBtnHtml}
+                  ${confirmBtnHtml}
+                </div>
+              </div>
+
+              ${expandedHtml}
+            </article>
+          `;
+        }).join('');
+      }
+
+      // =========================================================
+      // 9. 모달 제어 (관리자 / 일정 상세 / 일정 추가·수정)
+      // =========================================================
+      function openAdminModal() {
+        const me = getCurrentUser();
+        if (!me || !me.isAdmin) return;
+        renderAdminModalList();
+        document.getElementById('adminModal').classList.remove('hidden');
+      }
+
+      function closeAdminModal() {
+        document.getElementById('adminModal').classList.add('hidden');
+      }
+
+      function renderAdminModalList() {
+        const me = getCurrentUser();
+        if (!me) return;
+        const adminCount = state.users.filter((u) => u.isAdmin).length;
+        document.getElementById('adminQuotaText').textContent = `현재 관리자: ${adminCount} / ${MAX_ADMINS}명`;
+
+        const container = document.getElementById('adminUserList');
+        container.innerHTML = state.users.map(function (u) {
+          const isMe = u.name === me.name;
+          const isOnlyAdmin = u.isAdmin && adminCount <= 1;
+          const isMaxAdmin = !u.isAdmin && adminCount >= MAX_ADMINS;
+
+          const adminBtnDisabled = isOnlyAdmin || isMaxAdmin;
+          const adminBtnText = u.isAdmin ? (isOnlyAdmin ? '관리자(필수)' : '관리자 해제') : '관리자 지정';
+          const adminBtnCls = u.isAdmin
+            ? (isOnlyAdmin ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-slate-800 text-white border-slate-800 hover:bg-slate-900 cursor-pointer')
+            : (isMaxAdmin ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50 cursor-pointer');
+
+          const partOptions = [''].concat(PARTS).map(function (p) {
+            const label = p === '' ? '파트 미지정' : p;
+            return `<option value="${p}" ${u.part === p ? 'selected' : ''}>${label}</option>`;
+          }).join('');
+
+          return `
+            <div class="rounded-2xl border border-slate-200 bg-slate-50/60 p-3 space-y-2.5">
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2 min-w-0">
+                  <div style="background-color:${escapeHtml(u.color)};" class="w-9 h-9 rounded-full shrink-0 flex items-center justify-center text-white text-[10px] font-extrabold whitespace-nowrap">
+                    ${escapeHtml(u.name.slice(0, 3))}
+                  </div>
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      <span class="text-sm font-extrabold text-slate-900">${escapeHtml(u.name)}</span>
+                      ${isMe ? '<span class="px-1.5 py-0.5 rounded bg-slate-900 text-white text-[10px] font-bold">나</span>' : ''}
+                      ${u.isAdmin ? '<span class="px-1.5 py-0.5 rounded bg-[#B30E2A] text-white text-[10px] font-bold">관리자</span>' : ''}
+                      ${renderPartBadgeHtml(u.part)}
+                    </div>
+                    <p class="text-[11px] font-semibold ${u.workStatus === 'off' ? 'text-slate-400' : 'text-emerald-600'}">
+                      ${u.workStatus === 'off' ? '🌙 휴무(연차)' : '🟢 근무 중'}
+                    </p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    data-admin-toggle="${escapeHtml(u.name)}"
+                    ${adminBtnDisabled ? 'disabled' : ''}
+                    class="px-2.5 py-1.5 rounded-xl border text-xs font-extrabold transition ${adminBtnCls}"
+                  >
+                    ${adminBtnText}
+                  </button>
+                  ${!isMe ? `
+                    <button
+                      type="button"
+                      data-kick-user="${escapeHtml(u.name)}"
+                      class="px-2.5 py-1.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-extrabold cursor-pointer transition"
+                    >
+                      강퇴
+                    </button>
+                  ` : ''}
+                </div>
+              </div>
+
+              <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/70">
+                <label class="text-[11px] font-bold text-slate-500">담당 파트 지정</label>
+                <select
+                  data-assign-part="${escapeHtml(u.name)}"
+                  class="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  ${partOptions}
+                </select>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      function openScheduleDetailModal(dateKey, scheduleId) {
+        const list = state.calendarSchedules[dateKey] || [];
+        const sch = list.find((s) => s.id === scheduleId);
+        if (!sch) return;
+
+        state.viewingSchedule = { dateKey: dateKey, schedule: sch };
+        document.getElementById('detailScheduleDate').textContent = formatFullDateKo(dateKey);
+        document.getElementById('detailScheduleTime').textContent = sch.time ? sch.time : '종일';
+        document.getElementById('detailScheduleTitle').textContent = sch.title || '';
+
+        const memoBox = document.getElementById('detailScheduleMemoBox');
+        if (sch.memo && sch.memo.trim()) {
+          memoBox.textContent = sch.memo;
+          memoBox.classList.remove('text-slate-400');
+          memoBox.classList.add('text-slate-700');
+        } else {
+          memoBox.textContent = '등록된 메모가 없습니다.';
+          memoBox.classList.add('text-slate-400');
+          memoBox.classList.remove('text-slate-700');
+        }
+
+        let metaText = `작성자 ${sch.createdBy || '미상'}`;
+        if (sch.updatedBy && sch.updatedAt) {
+          metaText += ` · 수정 ${sch.updatedBy} (${formatMonthDayTime(sch.updatedAt)})`;
+        }
+        document.getElementById('detailScheduleMeta').textContent = metaText;
+
+        document.getElementById('scheduleDetailModal').classList.remove('hidden');
+      }
+
+      function closeScheduleDetailModal() {
+        document.getElementById('scheduleDetailModal').classList.add('hidden');
+        state.viewingSchedule = null;
+      }
+
+      function openScheduleFormModal(editTarget) {
+        const user = getCurrentUser();
+        const errEl = document.getElementById('scheduleFormError');
+        errEl.classList.add('hidden');
+
+        if (editTarget) {
+          state.editingSchedule = editTarget;
+          document.getElementById('scheduleFormTitle').textContent = '일정 수정';
+          document.getElementById('scheduleActorLabel').textContent = '수정자';
+          document.getElementById('scheduleDateInput').value = editTarget.dateKey;
+          document.getElementById('scheduleTimeInput').value = editTarget.time || '';
+          document.getElementById('scheduleTitleInput').value = editTarget.title || '';
+          document.getElementById('scheduleMemoInput').value = editTarget.memo || '';
+          document.getElementById('scheduleActorInput').value = user ? user.name : '';
+        } else {
+          state.editingSchedule = null;
+          document.getElementById('scheduleFormTitle').textContent = '일정 추가';
+          document.getElementById('scheduleActorLabel').textContent = '작성자';
+          document.getElementById('scheduleDateInput').value = state.selectedCalDate || getDateKey();
+          document.getElementById('scheduleTimeInput').value = '';
+          document.getElementById('scheduleTitleInput').value = '';
+          document.getElementById('scheduleMemoInput').value = '';
+          document.getElementById('scheduleActorInput').value = user ? user.name : '';
+        }
+
+        document.getElementById('scheduleFormModal').classList.remove('hidden');
+      }
+
+      function closeScheduleFormModal() {
+        document.getElementById('scheduleFormModal').classList.add('hidden');
+        state.editingSchedule = null;
+      }
+
+      function goCalendarToday() {
+        const now = new Date();
+        state.calViewYear = now.getFullYear();
+        state.calViewMonth = now.getMonth();
+        state.selectedCalDate = getDateKey(now);
+        const me = getCurrentUser();
+        if (me) renderOfficeFieldTab(me);
+      }
+
+      // =========================================================
+      // 10. 비즈니스 로직 액션 (글 등록, 전파, 확인, 업무 수행 - Firestore 저장)
+      // =========================================================
+      function submitOfficePost() {
+        const user = getCurrentUser();
+        if (!user || !db) return;
+        const selectedKey = state.selectedCalDate;
+        if (selectedKey < getDateKey()) {
+          showToast('지난 날짜에는 글을 쓸 수 없습니다.');
+          return;
+        }
+        const input = document.getElementById('officePostInput');
+        const content = input.value.trim();
+        if (!content) {
+          showToast('사무실 전달 사항을 입력해 주세요.');
+          return;
+        }
+        const newPost = {
+          id: 'off_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+          dateKey: selectedKey,
+          authorName: user.name,
+          content: content,
+          createdAt: Date.now(),
+          confirmedBy: null,
+          confirmedAtText: null
+        };
+        input.value = '';
+        db.collection(COLLECTIONS.officePosts).doc(newPost.id).set(newPost)
+          .then(function () {
+            showToast('사무실 전달 사항이 등록되었습니다.');
+          })
+          .catch(function (err) {
+            console.error('사무실 글 저장 오류:', err);
+            showToast('저장 중 오류가 발생했습니다.');
+          });
+      }
+
+      function submitFieldReport() {
+        const user = getCurrentUser();
+        if (!user || !db) return;
+        const selectedKey = state.selectedCalDate;
+        if (selectedKey < getDateKey()) {
+          showToast('지난 날짜에는 글을 쓸 수 없습니다.');
+          return;
+        }
+        const input = document.getElementById('fieldReportInput');
+        const content = input.value.trim();
+        if (!content) {
+          showToast('현장 보고 사항을 입력해 주세요.');
+          return;
+        }
+        const newPost = {
+          id: 'fld_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+          dateKey: selectedKey,
+          authorName: user.name,
+          content: content,
+          createdAt: Date.now(),
+          confirmedBy: null,
+          confirmedAtText: null
+        };
+        input.value = '';
+        db.collection(COLLECTIONS.fieldPosts).doc(newPost.id).set(newPost)
+          .then(function () {
+            showToast('현장 보고 사항이 등록되었습니다.');
+          })
+          .catch(function (err) {
+            console.error('현장 보고 저장 오류:', err);
+            showToast('저장 중 오류가 발생했습니다.');
+          });
+      }
+
+      function submitNewNotice() {
+        const user = getCurrentUser();
+        if (!user || !db) return;
+        const input = document.getElementById('noticeInput');
+        const content = input.value.trim();
+        if (!content) {
+          showToast('전파할 내용을 입력해 주세요.');
+          return;
+        }
+        const todayKey = getDateKey();
+
+        const newNotice = {
+          id: 'ntc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+          dateKey: todayKey,
+          authorName: user.name,
+          authorColor: user.color,
+          content: content,
+          isUrgent: state.composeType === 'urgent',
+          targetPart: state.composeTargetPart || '전체',
+          createdAt: Date.now(),
+          confirmedBy: [user.name],
+          handledBy: null,
+          lastRemindedAt: null,
+          remindedBy: null
+        };
+
+        knownBroadcastIds.add(newNotice.id);
+        input.value = '';
+        state.selectedNoticeDate = todayKey;
+
+        db.collection(COLLECTIONS.broadcasts).doc(newNotice.id).set(newNotice)
+          .then(function () {
+            playAlertSound(newNotice.isUrgent);
+            triggerVibration(newNotice.isUrgent);
+            showPushBanner(newNotice);
+            sendOsNotification(newNotice);
+          })
+          .catch(function (err) {
+            console.error('전파 저장 오류:', err);
+            showToast('전파 발송 중 오류가 발생했습니다.');
+          });
+      }
+
+      function confirmNoticeByCurrentUser(noticeId) {
+        const user = getCurrentUser();
+        if (!user || !db) return;
+        const list = state.noticesByDate[state.selectedNoticeDate] || [];
+        const target = list.find((n) => n.id === noticeId);
+        if (!target) return;
+
+        if (Array.isArray(target.confirmedBy) && target.confirmedBy.includes(user.name)) return;
+
+        db.collection(COLLECTIONS.broadcasts).doc(noticeId).update({
+          confirmedBy: firebase.firestore.FieldValue.arrayUnion(user.name)
+        }).then(function () {
+          closeOsNotification(noticeId);
+          showToast('공지를 확인했습니다.');
+        }).catch(function (err) {
+          console.error('확인 처리 오류:', err);
+          showToast('확인 처리 중 오류가 발생했습니다.');
+        });
+      }
+
+      function handleNoticeByCurrentUser(noticeId) {
+        const user = getCurrentUser();
+        if (!user || !db) return;
+        const list = state.noticesByDate[state.selectedNoticeDate] || [];
+        const target = list.find((n) => n.id === noticeId);
+        if (!target) return;
+
+        if (target.handledBy) {
+          showToast(`이미 ${target.handledBy}님이 처리를 완료했습니다.`);
+          return;
+        }
+        const targetPart = target.targetPart || '전체';
+        if (targetPart !== '전체' && user.part !== targetPart) {
+          showToast(`[${targetPart}] 파트 담당자만 업무를 수행할 수 있습니다.`);
+          return;
+        }
+
+        const docRef = db.collection(COLLECTIONS.broadcasts).doc(noticeId);
+        db.runTransaction(function (tx) {
+          return tx.get(docRef).then(function (doc) {
+            if (!doc.exists) throw new Error('NOT_FOUND');
+            const data = doc.data();
+            if (data.handledBy) throw new Error('ALREADY_HANDLED:' + data.handledBy);
+            tx.update(docRef, {
+              handledBy: user.name,
+              confirmedBy: firebase.firestore.FieldValue.arrayUnion(user.name)
+            });
+          });
+        }).then(function () {
+          closeOsNotification(noticeId);
+          showToast(`업무 수행 등록 완료: ${user.name}`);
+        }).catch(function (err) {
+          if (err && String(err.message).startsWith('ALREADY_HANDLED:')) {
+            const who = String(err.message).split(':')[1] || '다른 담당자';
+            showToast(`이미 ${who}님이 처리를 완료했습니다.`);
+          } else {
+            console.error('업무 수행 처리 오류:', err);
+            showToast('업무 수행 처리 중 오류가 발생했습니다.');
+          }
+        });
+      }
+
+      // =========================================================
+      // 11. 이벤트 바인딩
+      // =========================================================
+      function bindEvents() {
+        // --- 로그인 / 회원가입 화면 전환 ---
+        const loginForm = document.getElementById('loginForm');
+        const signupForm = document.getElementById('signupForm');
+        const signupPw = document.getElementById('signupPassword');
+        const signupPwConfirm = document.getElementById('signupPasswordConfirm');
+        const mismatchMsg = document.getElementById('signupPwMismatchMsg');
+
+        document.getElementById('goSignupBtn').addEventListener('click', function () {
+          loginForm.classList.add('hidden');
+          signupForm.classList.remove('hidden');
+          document.getElementById('loginErrorMsg').classList.add('hidden');
+        });
+
+        document.getElementById('goLoginBtn').addEventListener('click', function () {
+          signupForm.classList.add('hidden');
+          loginForm.classList.remove('hidden');
+          document.getElementById('signupErrorMsg').classList.add('hidden');
+        });
+
+        function checkPwMatchLive() {
+          const pw = signupPw.value;
+          const pwc = signupPwConfirm.value;
+          if (pwc.length > 0 && pw !== pwc) {
+            mismatchMsg.classList.remove('hidden');
+            signupPwConfirm.classList.add('border-red-500');
+          } else {
+            mismatchMsg.classList.add('hidden');
+            signupPwConfirm.classList.remove('border-red-500');
+          }
+        }
+        signupPw.addEventListener('input', checkPwMatchLive);
+        signupPwConfirm.addEventListener('input', checkPwMatchLive);
+
+        // --- 로그인 제출 ---
+        loginForm.addEventListener('submit', function (e) {
+          e.preventDefault();
+          const name = document.getElementById('loginName').value.trim();
+          const pw = document.getElementById('loginPassword').value;
+          const autoLogin = document.getElementById('autoLoginCheckbox').checked;
+          const errEl = document.getElementById('loginErrorMsg');
+
+          if (!firestoreReady.users || !firestoreReady.banned) {
+            errEl.textContent = '서버와 연결 중입니다. 잠시 후 다시 시도해 주세요.';
+            errEl.classList.remove('hidden');
+            return;
+          }
+          if (!name || !pw) {
+            errEl.textContent = '이름과 비밀번호를 모두 입력해 주세요.';
+            errEl.classList.remove('hidden');
+            return;
+          }
+          if (state.bannedNames.includes(name)) {
+            errEl.textContent = '강제 탈퇴 처리된 계정입니다. 로그인할 수 없습니다.';
+            errEl.classList.remove('hidden');
+            return;
+          }
+          const found = getUserByName(name);
+          if (!found || found.password !== pw) {
+            errEl.textContent = '이름 또는 비밀번호가 일치하지 않습니다.';
+            errEl.classList.remove('hidden');
+            return;
+          }
+
+          errEl.classList.add('hidden');
+          document.getElementById('loginPassword').value = '';
+          persistLoginSession(found.name, autoLogin);
+          state.activeTab = 'officeField';
+          renderApp();
+          showToast(`${found.name}님 환영합니다!`);
+        });
+
+        // --- 회원가입 제출 ---
+        signupForm.addEventListener('submit', function (e) {
+          e.preventDefault();
+          const name = document.getElementById('signupName').value.trim();
+          const pw = signupPw.value;
+          const pwConfirm = signupPwConfirm.value;
+          const errEl = document.getElementById('signupErrorMsg');
+
+          if (!db || !firestoreReady.users || !firestoreReady.banned) {
+            errEl.textContent = '서버와 연결 중입니다. 잠시 후 다시 시도해 주세요.';
+            errEl.classList.remove('hidden');
+            return;
+          }
+          if (!name || !pw || !pwConfirm) {
+            errEl.textContent = '모든 항목을 입력해 주세요.';
+            errEl.classList.remove('hidden');
+            return;
+          }
+          if (pw !== pwConfirm) {
+            mismatchMsg.classList.remove('hidden');
+            signupPwConfirm.classList.add('border-red-500');
+            errEl.textContent = '비밀번호가 일치하지 않습니다.';
+            errEl.classList.remove('hidden');
+            return;
+          }
+          if (state.bannedNames.includes(name)) {
+            errEl.textContent = '강제 탈퇴된 이름은 재가입할 수 없습니다.';
+            errEl.classList.remove('hidden');
+            return;
+          }
+          if (getUserByName(name)) {
+            errEl.textContent = '이미 등록된 이름입니다. 로그인해 주세요.';
+            errEl.classList.remove('hidden');
+            return;
+          }
+
+          const isFirstUser = state.users.length === 0;
+          const newUser = {
+            name: name,
+            password: pw,
+            color: generateUserColor(state.users),
+            isAdmin: isFirstUser,
+            part: '',
+            workStatus: 'working',
+            createdAt: Date.now()
+          };
+
+          db.collection(COLLECTIONS.users).doc(docIdFromName(name)).set(newUser)
+            .then(function () {
+              if (!getUserByName(name)) state.users.push(newUser);
+              persistLoginSession(newUser.name, true);
+              state.activeTab = 'officeField';
+
+              document.getElementById('signupName').value = '';
+              signupPw.value = '';
+              signupPwConfirm.value = '';
+              errEl.classList.add('hidden');
+              mismatchMsg.classList.add('hidden');
+
+              renderApp();
+              showToast(isFirstUser ? `${name}님 가입 완료! 최초 관리자로 자동 지정되었습니다.` : `${name}님 회원가입이 완료되었습니다.`);
+            })
+            .catch(function (err) {
+              console.error('회원가입 저장 오류:', err);
+              errEl.textContent = '회원가입 저장 중 오류가 발생했습니다.';
+              errEl.classList.remove('hidden');
+            });
+        });
+
+        // --- 로그아웃 ---
+        document.getElementById('logoutBtn').addEventListener('click', function () {
+          clearLoginSession();
+          closeAdminModal();
+          renderApp();
+          showToast('로그아웃되었습니다.');
+        });
+
+        // --- 근무 중 / 휴무(연차) 상태 토글 ---
+        document.getElementById('workStatusToggleBtn').addEventListener('click', function () {
+          const user = getCurrentUser();
+          if (!user || !db) return;
+          const nextStatus = user.workStatus === 'off' ? 'working' : 'off';
+
+          db.collection(COLLECTIONS.users).doc(docIdFromName(user.name)).update({
+            workStatus: nextStatus
+          }).then(function () {
+            if (nextStatus === 'off' && user.part) {
+              const newAlert = {
+                id: 'poff_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                userName: user.name,
+                part: user.part,
+                createdAt: Date.now(),
+                dismissedBy: []
+              };
+              return db.collection(COLLECTIONS.adminAlerts).doc(newAlert.id).set(newAlert);
+            }
+          }).then(function () {
+            showToast(nextStatus === 'off' ? '휴무(연차)로 전환되었습니다. 알림이 차단됩니다.' : '근무 중으로 전환되었습니다. 알림을 수신합니다.');
+          }).catch(function (err) {
+            console.error('근무 상태 변경 오류:', err);
+            showToast('상태 변경 중 오류가 발생했습니다.');
+          });
+        });
+
+        // --- 관리자 모달 ---
+        document.getElementById('openAdminBtn').addEventListener('click', openAdminModal);
+        document.getElementById('closeAdminModalBtn').addEventListener('click', closeAdminModal);
+        document.getElementById('adminModal').addEventListener('click', function (e) {
+          if (e.target === this) closeAdminModal();
+        });
+
+        document.getElementById('adminUserList').addEventListener('click', function (e) {
+          const toggleBtn = e.target.closest('[data-admin-toggle]');
+          if (toggleBtn && !toggleBtn.disabled) {
+            const targetName = toggleBtn.dataset.adminToggle;
+            const targetUser = getUserByName(targetName);
+            if (!targetUser || !db) return;
+
+            const adminCount = state.users.filter((u) => u.isAdmin).length;
+            let nextIsAdmin = targetUser.isAdmin;
+            if (targetUser.isAdmin) {
+              if (adminCount <= 1) {
+                showToast('최소 1명의 관리자가 필요합니다.');
+                return;
+              }
+              nextIsAdmin = false;
+            } else {
+              if (adminCount >= MAX_ADMINS) {
+                showToast(`관리자는 최대 ${MAX_ADMINS}명까지만 지정할 수 있습니다.`);
+                return;
+              }
+              nextIsAdmin = true;
+            }
+
+            db.collection(COLLECTIONS.users).doc(docIdFromName(targetUser.name)).update({
+              isAdmin: nextIsAdmin
+            }).then(function () {
+              showToast(nextIsAdmin ? `${targetUser.name}님이 관리자로 지정되었습니다.` : `${targetUser.name}님의 관리자 권한이 해제되었습니다.`);
+            }).catch(function (err) {
+              console.error('관리자 권한 변경 오류:', err);
+              showToast('권한 변경 중 오류가 발생했습니다.');
+            });
+            return;
+          }
+
+          const kickBtn = e.target.closest('[data-kick-user]');
+          if (kickBtn) {
+            const targetName = kickBtn.dataset.kickUser;
+            const me = getCurrentUser();
+            if (!me || targetName === me.name || !db) return;
+
+            openConfirmModal({
+              title: '회원 강제 탈퇴',
+              message: `${targetName}님을 강제 탈퇴 처리하시겠습니까?\n탈퇴 후에는 해당 이름으로 로그인 및 재가입이 차단됩니다.`,
+              okText: '강퇴하기',
+              cancelText: '취소',
+              onConfirm: function () {
+                const docId = docIdFromName(targetName);
+                const batch = db.batch();
+                batch.delete(db.collection(COLLECTIONS.users).doc(docId));
+                batch.set(db.collection(COLLECTIONS.bannedUsers).doc(docId), {
+                  name: targetName,
+                  bannedAt: Date.now()
+                });
+                batch.commit().then(function () {
+                  showToast(`${targetName}님이 강제 탈퇴 처리되었습니다.`);
+                }).catch(function (err) {
+                  console.error('회원 강퇴 오류:', err);
+                  showToast('강제 탈퇴 처리 중 오류가 발생했습니다.');
+                });
+              }
+            });
+          }
+        });
+
+        document.getElementById('adminUserList').addEventListener('change', function (e) {
+          const selectEl = e.target.closest('[data-assign-part]');
+          if (!selectEl || !db) return;
+          const targetName = selectEl.dataset.assignPart;
+          const targetUser = getUserByName(targetName);
+          if (!targetUser) return;
+          const nextPart = selectEl.value;
+          db.collection(COLLECTIONS.users).doc(docIdFromName(targetUser.name)).update({
+            part: nextPart
+          }).then(function () {
+            showToast(nextPart ? `${targetUser.name}님에게 [${nextPart}] 파트가 지정되었습니다.` : `${targetUser.name}님의 파트 지정이 해제되었습니다.`);
+          }).catch(function (err) {
+            console.error('파트 지정 오류:', err);
+            showToast('파트 지정 중 오류가 발생했습니다.');
+          });
+        });
+
+        // --- 하단 고정 탭 전환 ---
+        document.getElementById('tabOfficeFieldBtn').addEventListener('click', function () {
+          state.activeTab = 'officeField';
+          renderTabUI();
+        });
+
+        document.getElementById('tabFieldBtn').addEventListener('click', function () {
+          state.activeTab = 'field';
+          renderTabUI();
+        });
+
+        // --- 월간 캘린더 컨트롤 및 클릭 ---
+        document.getElementById('calPrevMonthBtn').addEventListener('click', function () {
+          state.calViewMonth -= 1;
+          if (state.calViewMonth < 0) {
+            state.calViewMonth = 11;
+            state.calViewYear -= 1;
+          }
+          renderCalendar();
+        });
+
+        document.getElementById('calNextMonthBtn').addEventListener('click', function () {
+          state.calViewMonth += 1;
+          if (state.calViewMonth > 11) {
+            state.calViewMonth = 0;
+            state.calViewYear += 1;
+          }
+          renderCalendar();
+        });
+
+        document.getElementById('calTodayBtn').addEventListener('click', goCalendarToday);
+
+        document.getElementById('calAddScheduleBtn').addEventListener('click', function () {
+          openScheduleFormModal(null);
+        });
+
+        document.getElementById('calendarGrid').addEventListener('click', function (e) {
+          const schEl = e.target.closest('[data-schedule-click]');
+          if (schEl) {
+            e.stopPropagation();
+            const schId = schEl.dataset.scheduleClick;
+            const schDate = schEl.dataset.scheduleDate;
+            openScheduleDetailModal(schDate, schId);
+            return;
+          }
+
+          const cell = e.target.closest('[data-cal-date]');
+          if (cell) {
+            state.selectedCalDate = cell.dataset.calDate;
+            const d = parseDateKey(state.selectedCalDate);
+            state.calViewYear = d.getFullYear();
+            state.calViewMonth = d.getMonth();
+            const me = getCurrentUser();
+            if (me) renderOfficeFieldTab(me);
+          }
+        });
+
+        // --- 일정 상세 모달 ---
+        document.getElementById('detailCloseBtn').addEventListener('click', closeScheduleDetailModal);
+        document.getElementById('scheduleDetailModal').addEventListener('click', function (e) {
+          if (e.target === this) closeScheduleDetailModal();
+        });
+        document.getElementById('detailEditBtn').addEventListener('click', function () {
+          if (!state.viewingSchedule) return;
+          const { schedule } = state.viewingSchedule;
+          closeScheduleDetailModal();
+          openScheduleFormModal(schedule);
+        });
+
+        // --- 일정 추가 / 수정 모달 ---
+        document.getElementById('scheduleCancelBtn').addEventListener('click', closeScheduleFormModal);
+        document.getElementById('scheduleFormModal').addEventListener('click', function (e) {
+          if (e.target === this) closeScheduleFormModal();
+        });
+
+        document.getElementById('scheduleForm').addEventListener('submit', function (e) {
+          e.preventDefault();
+          if (!db) return;
+          const dateVal = document.getElementById('scheduleDateInput').value;
+          const timeVal = document.getElementById('scheduleTimeInput').value;
+          const titleVal = document.getElementById('scheduleTitleInput').value.trim();
+          const memoVal = document.getElementById('scheduleMemoInput').value.trim();
+          const actorVal = document.getElementById('scheduleActorInput').value.trim();
+          const errEl = document.getElementById('scheduleFormError');
+
+          if (!dateVal || !titleVal) {
+            errEl.textContent = '날짜와 일정 제목을 입력해 주세요.';
+            errEl.classList.remove('hidden');
+            return;
+          }
+          const user = getCurrentUser();
+          const finalActor = actorVal || (user ? user.name : '사용자');
+
+          let savePromise;
+          if (state.editingSchedule) {
+            const { id } = state.editingSchedule;
+            savePromise = db.collection(COLLECTIONS.calendarEvents).doc(id).update({
+              dateKey: dateVal,
+              time: timeVal || '',
+              title: titleVal,
+              memo: memoVal,
+              updatedBy: finalActor,
+              updatedAt: Date.now()
+            }).then(function () {
+              showToast('일정이 수정되었습니다.');
+            });
+          } else {
+            const newId = 'sch_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+            savePromise = db.collection(COLLECTIONS.calendarEvents).doc(newId).set({
+              id: newId,
+              dateKey: dateVal,
+              time: timeVal || '',
+              title: titleVal,
+              memo: memoVal,
+              createdBy: finalActor,
+              createdAt: Date.now(),
+              updatedBy: null,
+              updatedAt: null
+            }).then(function () {
+              showToast('새 일정이 추가되었습니다.');
+            });
+          }
+
+          savePromise.then(function () {
+            state.selectedCalDate = dateVal;
+            const d = parseDateKey(dateVal);
+            state.calViewYear = d.getFullYear();
+            state.calViewMonth = d.getMonth();
+            closeScheduleFormModal();
+            if (user) renderOfficeFieldTab(user);
+          }).catch(function (err) {
+            console.error('일정 저장 오류:', err);
+            errEl.textContent = '일정 저장 중 오류가 발생했습니다.';
+            errEl.classList.remove('hidden');
+          });
+        });
+
+        // --- 사무실 / 현장 보고 등록 및 확인 체크 ---
+        document.getElementById('officePostSubmitBtn').addEventListener('click', submitOfficePost);
+        document.getElementById('officePostInput').addEventListener('keydown', function (e) {
+          if (e.ctrlKey && e.key === 'Enter') {
+            e.preventDefault();
+            submitOfficePost();
+          }
+        });
+
+        document.getElementById('fieldReportSubmitBtn').addEventListener('click', submitFieldReport);
+        document.getElementById('fieldReportInput').addEventListener('keydown', function (e) {
+          if (e.ctrlKey && e.key === 'Enter') {
+            e.preventDefault();
+            submitFieldReport();
+          }
+        });
+
+        document.getElementById('officeFieldTabPanel').addEventListener('click', function (e) {
+          if (e.target.closest('[data-go-today]')) {
+            goCalendarToday();
+            return;
+          }
+          const confirmOfficeBtn = e.target.closest('[data-confirm-office-post]');
+          if (confirmOfficeBtn) {
+            if (state.selectedCalDate !== getDateKey() || !db) return;
+            const postId = confirmOfficeBtn.dataset.confirmOfficePost;
+            const user = getCurrentUser();
+            if (!user) return;
+            const list = state.officePostsByDate[state.selectedCalDate] || [];
+            const target = list.find((p) => p.id === postId);
+            if (target && !target.confirmedBy) {
+              db.collection(COLLECTIONS.officePosts).doc(postId).update({
+                confirmedBy: user.name,
+                confirmedAtText: formatMonthDayTime(Date.now())
+              }).then(function () {
+                showToast('현장 확인이 완료되었습니다.');
+              }).catch(function (err) {
+                console.error('사무실 글 확인 오류:', err);
+                showToast('확인 처리 중 오류가 발생했습니다.');
+              });
+            }
+            return;
+          }
+
+          const confirmFieldBtn = e.target.closest('[data-confirm-field-report]');
+          if (confirmFieldBtn) {
+            if (state.selectedCalDate !== getDateKey() || !db) return;
+            const postId = confirmFieldBtn.dataset.confirmFieldReport;
+            const user = getCurrentUser();
+            if (!user) return;
+            const list = state.fieldReportsByDate[state.selectedCalDate] || [];
+            const target = list.find((p) => p.id === postId);
+            if (target && !target.confirmedBy) {
+              db.collection(COLLECTIONS.fieldPosts).doc(postId).update({
+                confirmedBy: user.name,
+                confirmedAtText: formatMonthDayTime(Date.now())
+              }).then(function () {
+                showToast('확인이 완료되었습니다.');
+              }).catch(function (err) {
+                console.error('현장 글 확인 오류:', err);
+                showToast('확인 처리 중 오류가 발생했습니다.');
+              });
+            }
+          }
+        });
+
+        // --- [현장] 탭 이벤트 (날짜 바, 작성, 필터, 카드 액션) ---
+        document.getElementById('dateHistoryBar').addEventListener('click', function (e) {
+          const btn = e.target.closest('[data-notice-date]');
+          if (!btn) return;
+          state.selectedNoticeDate = btn.dataset.noticeDate;
+          const me = getCurrentUser();
+          if (me) renderFieldTab(me);
+        });
+
+        document.getElementById('backToTodayNoticeBtn').addEventListener('click', function () {
+          state.selectedNoticeDate = getDateKey();
+          const me = getCurrentUser();
+          if (me) renderFieldTab(me);
+        });
+
+        document.getElementById('unreadBannerJump').addEventListener('click', function () {
+          const banner = document.getElementById('unreadStickyBanner');
+          if (banner && banner.dataset.noticeId) {
+            scrollToNoticeCard(banner.dataset.noticeId);
+          }
+        });
+
+        document.getElementById('unreadBannerConfirmBtn').addEventListener('click', function () {
+          const banner = document.getElementById('unreadStickyBanner');
+          if (banner && banner.dataset.noticeId) {
+            confirmNoticeByCurrentUser(banner.dataset.noticeId);
+          }
+        });
+
+        document.getElementById('typeNormalBtn').addEventListener('click', function () {
+          state.composeType = 'normal';
+          this.className = 'px-3 py-1 rounded-lg text-xs font-extrabold transition cursor-pointer bg-white text-slate-900 shadow-xs';
+          document.getElementById('typeUrgentBtn').className = 'px-3 py-1 rounded-lg text-xs font-extrabold transition cursor-pointer text-slate-500 hover:text-red-600';
+        });
+
+        document.getElementById('typeUrgentBtn').addEventListener('click', function () {
+          state.composeType = 'urgent';
+          this.className = 'px-3 py-1 rounded-lg text-xs font-extrabold transition cursor-pointer bg-red-600 text-white shadow-xs';
+          document.getElementById('typeNormalBtn').className = 'px-3 py-1 rounded-lg text-xs font-extrabold transition cursor-pointer text-slate-500 hover:text-slate-800';
+        });
+
+        document.getElementById('targetPartSelector').addEventListener('click', function (e) {
+          const btn = e.target.closest('[data-target-part]');
+          if (!btn) return;
+          state.composeTargetPart = btn.dataset.targetPart;
+          const me = getCurrentUser();
+          if (me) renderFieldTab(me);
+        });
+
+        document.getElementById('sendNoticeBtn').addEventListener('click', submitNewNotice);
+        document.getElementById('noticeInput').addEventListener('keydown', function (e) {
+          if (e.ctrlKey && e.key === 'Enter') {
+            e.preventDefault();
+            submitNewNotice();
+          }
+        });
+
+        document.querySelectorAll('.notice-filter-btn').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            state.noticeFilter = this.dataset.noticeFilter;
+            document.querySelectorAll('.notice-filter-btn').forEach(function (b) {
+              const active = b.dataset.noticeFilter === state.noticeFilter;
+              b.className = active
+                ? 'notice-filter-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-slate-900 text-white cursor-pointer transition'
+                : 'notice-filter-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-white border border-slate-200 text-slate-600 cursor-pointer transition';
+            });
+            const me = getCurrentUser();
+            if (me) renderFieldTab(me);
+          });
+        });
+
+        document.getElementById('noticeList').addEventListener('click', function (e) {
+          const confirmBtn = e.target.closest('[data-confirm-notice]');
+          if (confirmBtn) {
+            confirmNoticeByCurrentUser(confirmBtn.dataset.confirmNotice);
+            return;
+          }
+
+          const handleBtn = e.target.closest('[data-handle-notice]');
+          if (handleBtn) {
+            handleNoticeByCurrentUser(handleBtn.dataset.handleNotice);
+            return;
+          }
+
+          const toggleBtn = e.target.closest('[data-toggle-confirm-list]');
+          if (toggleBtn) {
+            const id = toggleBtn.dataset.toggleConfirmList;
+            if (state.expandedNoticeIds.has(id)) {
+              state.expandedNoticeIds.delete(id);
+            } else {
+              state.expandedNoticeIds.add(id);
+            }
+            const me = getCurrentUser();
+            if (me) renderFieldTab(me);
+            return;
+          }
+
+          const remindBtn = e.target.closest('[data-remind-notice]');
+          if (remindBtn) {
+            const id = remindBtn.dataset.remindNotice;
+            const user = getCurrentUser();
+            const list = state.noticesByDate[state.selectedNoticeDate] || [];
+            const target = list.find((n) => n.id === id);
+            if (target && db) {
+              const remindTs = Date.now();
+              knownRemindMap[id] = remindTs;
+              db.collection(COLLECTIONS.broadcasts).doc(id).update({
+                lastRemindedAt: remindTs,
+                remindedBy: user ? user.name : ''
+              }).then(function () {
+                playAlertSound(true);
+                triggerVibration(true);
+                showPushBanner({ ...target, content: `[재알림] ${target.content}`, isUrgent: true });
+                sendOsNotification({ ...target, content: `[재알림] ${target.content}`, isUrgent: true });
+                showToast('미확인 인원에게 재알림을 발송했습니다.');
+              }).catch(function (err) {
+                console.error('재알림 발송 오류:', err);
+                showToast('재알림 발송 중 오류가 발생했습니다.');
+              });
+            }
+          }
+        });
+
+        // --- 푸시 배너 클릭 / 닫기 ---
+        document.getElementById('pushBannerClose').addEventListener('click', function (e) {
+          e.stopPropagation();
+          document.getElementById('pushBanner').classList.add('hidden');
+        });
+        document.getElementById('pushBanner').addEventListener('click', function () {
+          const id = this.dataset.noticeId;
+          this.classList.add('hidden');
+          if (id && getCurrentUser()) {
+            state.activeTab = 'field';
+            state.selectedNoticeDate = getDateKey();
+            renderMainApp();
+            scrollToNoticeCard(id);
+          }
+        });
+
+        // --- 공통 확인 모달 ---
+        document.getElementById('confirmModalCancelBtn').addEventListener('click', closeConfirmModal);
+        document.getElementById('confirmModal').addEventListener('click', function (e) {
+          if (e.target === this) closeConfirmModal();
+        });
+        document.getElementById('confirmModalOkBtn').addEventListener('click', function () {
+          const cb = state.confirmCallback;
+          closeConfirmModal();
+          if (typeof cb === 'function') cb();
+        });
+      }
+
+      // =========================================================
+      // 12. 실시간 시계 및 자정 자동 초기화 타이머
+      // =========================================================
+      function updateHeaderClockAndMidnightCheck() {
+        const now = new Date();
+        const clockEl = document.getElementById('headerClockText');
+        if (clockEl) {
+          const y = now.getFullYear();
+          const m = String(now.getMonth() + 1).padStart(2, '0');
+          const d = String(now.getDate()).padStart(2, '0');
+          const wd = WEEKDAYS_KO[now.getDay()];
+          const hh = String(now.getHours()).padStart(2, '0');
+          const mm = String(now.getMinutes()).padStart(2, '0');
+          const ss = String(now.getSeconds()).padStart(2, '0');
+          clockEl.textContent = `${y}-${m}-${d} (${wd}) ${hh}:${mm}:${ss}`;
+        }
+
+        const currentTodayKey = getDateKey(now);
+        if (currentTodayKey !== lastKnownTodayKey) {
+          lastKnownTodayKey = currentTodayKey;
+          pruneOldNotices();
+          state.selectedNoticeDate = currentTodayKey;
+          state.selectedCalDate = currentTodayKey;
+          state.calViewYear = now.getFullYear();
+          state.calViewMonth = now.getMonth();
+          if (getCurrentUser()) {
+            renderMainApp();
+            showToast('자정이 지나 오늘 날짜로 자동 전환되었습니다.');
+          }
+        }
+      }
+
+      // =========================================================
+      // 13. 초기화 (window.onload)
+      // =========================================================
+      window.onload = function () {
+        const authLogo = document.getElementById('authLogoSlot');
+        const headerLogo = document.getElementById('headerLogoSlot');
+        if (authLogo) authLogo.innerHTML = createMinsokLogoSvg(60);
+        if (headerLogo) headerLogo.innerHTML = createMinsokLogoSvg(54);
+
+        bindEvents();
+        initFirestoreListeners();
+
+        updateHeaderClockAndMidnightCheck();
+        setInterval(updateHeaderClockAndMidnightCheck, 1000);
+      };
+    })();
+  </script>
+</body>
+</html>
