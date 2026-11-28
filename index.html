@@ -639,7 +639,7 @@
 
           <!-- 전파 대상 파트 선택 -->
           <div>
-            <p class="text-[11px] font-bold text-slate-500 mb-1.5">전파 대상 선택 (모든 직원이 열람 가능 · 지정 파트만 업무 수행 가능)</p>
+            <p class="text-[11px] font-bold text-slate-500 mb-1.5">전파 대상 선택 (모든 직원이 열람 가능 · 지정 파트 및 관리자 업무 수행 가능)</p>
             <div id="targetPartSelector" class="flex items-center gap-1.5 flex-wrap"></div>
           </div>
 
@@ -662,12 +662,16 @@
           </div>
         </section>
 
-        <!-- 전파 목록 필터 바 -->
+        <!-- 전파 목록 필터 바 (전체 / 미확인 / 긴급 / 냉동 / 민속마감 / 택배 / 한우정리) -->
         <div class="flex items-center justify-between gap-2 flex-wrap px-0.5">
-          <div class="flex items-center gap-1.5">
+          <div class="flex items-center gap-1.5 flex-wrap">
             <button data-notice-filter="all" type="button" class="notice-filter-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-slate-900 text-white cursor-pointer transition">전체</button>
             <button data-notice-filter="unread" type="button" class="notice-filter-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-white border border-slate-200 text-slate-600 cursor-pointer transition">미확인</button>
             <button data-notice-filter="urgent" type="button" class="notice-filter-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-white border border-slate-200 text-slate-600 cursor-pointer transition">긴급</button>
+            <button data-notice-filter="냉동" type="button" class="notice-filter-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-white border border-slate-200 text-slate-600 cursor-pointer transition">냉동</button>
+            <button data-notice-filter="민속마감" type="button" class="notice-filter-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-white border border-slate-200 text-slate-600 cursor-pointer transition">민속마감</button>
+            <button data-notice-filter="택배" type="button" class="notice-filter-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-white border border-slate-200 text-slate-600 cursor-pointer transition">택배</button>
+            <button data-notice-filter="한우정리" type="button" class="notice-filter-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-white border border-slate-200 text-slate-600 cursor-pointer transition">한우정리</button>
           </div>
           <span id="noticeCountSummary" class="text-xs font-bold text-slate-500">0건</span>
         </div>
@@ -676,27 +680,40 @@
         <div id="noticeList" class="space-y-3"></div>
       </div>
 
+      <!-- ===================================================== -->
+      <!-- 탭 3: [냉동재고현황] 한우 / 한돈 실시간 재고 관리       -->
+      <!-- ===================================================== -->
+      <div id="frozenTabPanel" class="hidden tab-section-hidden space-y-4"></div>
+
     </main>
 
-    <!-- 하단 고정 2개 카테고리 탭 바 -->
+    <!-- 하단 고정 3개 카테고리 탭 바 -->
     <nav class="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur border-t border-slate-200 py-2 shadow-[0_-4px_12px_rgba(15,23,42,0.05)]">
-      <div id="bottomTabInner" class="w-full pc-wide-container mx-auto px-2.5 md:px-4 grid grid-cols-2 gap-2 transition-all">
+      <div id="bottomTabInner" class="w-full pc-wide-container mx-auto px-2.5 md:px-4 grid grid-cols-3 gap-2 transition-all">
         <button
           id="tabOfficeFieldBtn"
           type="button"
-          class="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-[#B30E2A] text-white shadow-sm"
+          class="flex items-center justify-center gap-1.5 py-2.5 px-2 sm:px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-[#B30E2A] text-white shadow-sm"
         >
           <span>📅</span>
-          <span>사무실&amp;현장</span>
+          <span class="truncate">사무실&amp;현장</span>
         </button>
         <button
           id="tabFieldBtn"
           type="button"
-          class="relative flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600"
+          class="relative flex items-center justify-center gap-1.5 py-2.5 px-2 sm:px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600"
         >
           <span>📢</span>
-          <span>현장</span>
-          <span id="fieldTabUnreadBadge" class="hidden ml-1 px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-extrabold leading-none">0</span>
+          <span class="truncate">현장</span>
+          <span id="fieldTabUnreadBadge" class="hidden ml-0.5 px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-extrabold leading-none">0</span>
+        </button>
+        <button
+          id="tabFrozenBtn"
+          type="button"
+          class="flex items-center justify-center gap-1.5 py-2.5 px-2 sm:px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600"
+        >
+          <span>❄️</span>
+          <span class="truncate">냉동재고현황</span>
         </button>
       </div>
     </nav>
@@ -922,6 +939,17 @@
       const HISTORY_DAYS = 7;
       const FCM_VAPID_KEY = 'BKP95hlVga6hct3AzUB_NBxinhT_T8SCBxiwTflLAJn0AK4HFXSiUmDN_M3CSPyy5HZndUWswB6qt8GF44xXsNs';
 
+      // 제미나이 미리보기(Canvas) 충돌 방지 안전장치: 실제 배포 도메인에서만 FCM/SW/Analytics 실행
+      const IS_PROD_HOST = (function () {
+        try {
+          return typeof window !== 'undefined' &&
+            window.location &&
+            window.location.hostname === 'minsok.vercel.app';
+        } catch (e) {
+          return false;
+        }
+      })();
+
       const firebaseConfig = {
         apiKey: "AIzaSyDw1ovHdCcr3ttVwZdIjoZXOpDglovF7M4",
         authDomain: "minsok-d0af1.firebaseapp.com",
@@ -942,30 +970,28 @@
             ? firebase.app()
             : firebase.initializeApp(firebaseConfig);
           db = firebase.firestore(fbApp);
-          try {
-            if (typeof firebase.analytics === 'function') {
-              if (typeof firebase.analytics.isSupported === 'function') {
-                firebase.analytics.isSupported().then(function (supported) {
-                  if (supported) {
-                    try { analytics = firebase.analytics(fbApp); } catch (e) {}
-                  }
-                }).catch(function () {});
-              } else {
-                analytics = firebase.analytics(fbApp);
+          if (IS_PROD_HOST) {
+            try {
+              if (typeof firebase.analytics === 'function') {
+                if (typeof firebase.analytics.isSupported === 'function') {
+                  firebase.analytics.isSupported().then(function (supported) {
+                    if (supported) {
+                      try { analytics = firebase.analytics(fbApp); } catch (e) {}
+                    }
+                  }).catch(function () {});
+                } else {
+                  analytics = firebase.analytics(fbApp);
+                }
               }
-            }
-          } catch (analyticsErr) {
-            // 미리보기/iframe 환경 Analytics 미지원 무시
-          }
-          try {
-            if (
-              typeof firebase.messaging === 'function' &&
-              (typeof firebase.messaging.isSupported !== 'function' || firebase.messaging.isSupported())
-            ) {
-              messaging = firebase.messaging(fbApp);
-            }
-          } catch (messagingErr) {
-            // 미리보기/iframe 환경 Messaging 미지원 무시
+            } catch (analyticsErr) {}
+            try {
+              if (
+                typeof firebase.messaging === 'function' &&
+                (typeof firebase.messaging.isSupported !== 'function' || firebase.messaging.isSupported())
+              ) {
+                messaging = firebase.messaging(fbApp);
+              }
+            } catch (messagingErr) {}
           }
         }
       } catch (fbInitErr) {
@@ -986,14 +1012,20 @@
         return 'u_' + encodeURIComponent(String(name || '').trim());
       }
 
-      const PARTS = ['냉동', '민속마감', '택배', '부위분리'];
-      const TARGET_PARTS = ['전체', '냉동', '민속마감', '택배', '부위분리'];
+      // 기존 Firestore 데이터의 '부위분리'도 '한우정리'로 자연스럽게 호환 처리
+      function normalizePartName(part) {
+        if (part === '부위분리') return '한우정리';
+        return part || '';
+      }
+
+      const PARTS = ['냉동', '민속마감', '택배', '한우정리'];
+      const TARGET_PARTS = ['전체', '냉동', '민속마감', '택배', '한우정리'];
 
       const PART_STYLES = {
         '냉동': 'bg-sky-100 text-sky-800 border-sky-200',
         '민속마감': 'bg-purple-100 text-purple-800 border-purple-200',
         '택배': 'bg-amber-100 text-amber-800 border-amber-200',
-        '부위분리': 'bg-emerald-100 text-emerald-800 border-emerald-200'
+        '한우정리': 'bg-emerald-100 text-emerald-800 border-emerald-200'
       };
 
       const BASE_COLORS = [
@@ -1076,9 +1108,10 @@
       }
 
       function renderPartBadgeHtml(part) {
-        if (!part) return '';
-        const cls = PART_STYLES[part] || 'bg-slate-100 text-slate-700 border-slate-200';
-        return `<span class="inline-flex items-center px-1.5 py-0.5 rounded-md border text-[10px] font-extrabold leading-none shrink-0 whitespace-nowrap ${cls}">${escapeHtml(part)}</span>`;
+        const normalized = normalizePartName(part);
+        if (!normalized) return '';
+        const cls = PART_STYLES[normalized] || 'bg-slate-100 text-slate-700 border-slate-200';
+        return `<span class="inline-flex items-center px-1.5 py-0.5 rounded-md border text-[10px] font-extrabold leading-none shrink-0 whitespace-nowrap ${cls}">${escapeHtml(normalized)}</span>`;
       }
 
       function createMinsokLogoSvg(size) {
@@ -1159,7 +1192,7 @@
         selectedNoticeDate: todayInitial,
         composeType: 'normal', // 'normal' | 'urgent'
         composeTargetPart: '전체',
-        noticeFilter: 'all', // 'all' | 'unread' | 'urgent'
+        noticeFilter: 'all', // 'all' | 'unread' | 'urgent' | '냉동' | '민속마감' | '택배' | '한우정리'
         expandedNoticeIds: new Set(),
 
         // 확인 모달 콜백
@@ -1227,7 +1260,10 @@
           const list = [];
           snapshot.forEach(function (doc) {
             const data = doc.data();
-            if (data && data.name) list.push(data);
+            if (data && data.name) {
+              data.part = normalizePartName(data.part);
+              list.push(data);
+            }
           });
           list.sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
           state.users = list;
@@ -1264,6 +1300,7 @@
           snapshot.forEach(function (doc) {
             const data = doc.data();
             if (!data || !data.id) return;
+            data.targetPart = data.targetPart ? normalizePartName(data.targetPart) : '전체';
             const dKey = data.dateKey || getDateKey(new Date(data.createdAt || Date.now()));
 
             if (!validDates.has(dKey)) {
@@ -1308,13 +1345,13 @@
           if (me) {
             renderFieldTab(me);
 
-            if (me.notifyField !== false) {
+            if (isCategoryNotificationEnabled('field')) {
               incomingNotices.forEach(function (ntc) {
                 if (ntc.authorName !== me.name) {
-                  playAlertSound(!!ntc.isUrgent);
-                  triggerVibration(!!ntc.isUrgent);
-                  showPushBanner(ntc);
-                  sendOsNotification(ntc);
+                  playAlertSound(!!ntc.isUrgent, 'field');
+                  triggerVibration(!!ntc.isUrgent, 'field');
+                  showPushBanner(ntc, 'field');
+                  sendOsNotification(ntc, 'field');
                 }
               });
 
@@ -1325,10 +1362,10 @@
                     content: '[재알림] ' + ntc.content,
                     isUrgent: true
                   });
-                  playAlertSound(true);
-                  triggerVibration(true);
-                  showPushBanner(remindPayload);
-                  sendOsNotification(remindPayload);
+                  playAlertSound(true, 'field');
+                  triggerVibration(true, 'field');
+                  showPushBanner(remindPayload, 'field');
+                  sendOsNotification(remindPayload, 'field');
                 }
               });
             }
@@ -1393,7 +1430,10 @@
           const alerts = [];
           snapshot.forEach(function (doc) {
             const data = doc.data();
-            if (data && data.id) alerts.push(data);
+            if (data && data.id) {
+              data.part = normalizePartName(data.part);
+              alerts.push(data);
+            }
           });
           alerts.sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
           state.pendingPartOffAlerts = alerts;
@@ -1482,14 +1522,9 @@
       // =========================================================
       function syncFcmTokenForCurrentUser(user) {
         try {
+          if (!IS_PROD_HOST) return;
           if (!user || user.workStatus === 'off' || !db || !messaging) return;
           if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) return;
-
-          // 미리보기(about:srcdoc, blob:, file:) 환경에서는 SW/FCM 호출 생략
-          const proto = window.location && window.location.protocol;
-          const host = window.location && window.location.hostname;
-          const isSecureOrigin = proto === 'https:' || host === 'localhost' || host === '127.0.0.1';
-          if (!isSecureOrigin) return;
 
           const syncKey = user.name + ':' + (user.workStatus || 'working');
           if (lastFcmSyncedKey === syncKey && user.fcmToken) return;
@@ -1538,8 +1573,9 @@
       // [현장] 탭 전파 시 푸시 발송 (근무 중 + notifyField ON 대상자)
       function sendFcmPushForNotice(notice, senderName) {
         try {
+          if (!IS_PROD_HOST) return;
           if (!db || !notice) return;
-          const targetPart = notice.targetPart || '전체';
+          const targetPart = normalizePartName(notice.targetPart) || '전체';
 
           db.collection(COLLECTIONS.users).get().then(function (snapshot) {
             const tokenSet = new Set();
@@ -1549,7 +1585,7 @@
               if (u.workStatus === 'off') return;
               if (u.notifyField === false) return;
               if (u.name === senderName) return;
-              if (targetPart !== '전체' && u.part !== targetPart) return;
+              if (targetPart !== '전체' && normalizePartName(u.part) !== targetPart) return;
               tokenSet.add(u.fcmToken);
             });
 
@@ -1576,6 +1612,7 @@
       // [사무실&현장] 새 글 등록 시 푸시 발송 (근무 중 + notifyOffice ON 대상자)
       function sendFcmPushForOfficePost(post, postTypeLabel, senderName) {
         try {
+          if (!IS_PROD_HOST) return;
           if (!db || !post) return;
 
           db.collection(COLLECTIONS.users).get().then(function (snapshot) {
@@ -1613,6 +1650,14 @@
         return !!(me && me.workStatus !== 'off');
       }
 
+      // 카테고리별 자체 알림(OS 알림·배너·알림음·진동) 허용 여부 확인
+      function isCategoryNotificationEnabled(category) {
+        const me = getCurrentUser();
+        if (!me || me.workStatus === 'off') return false;
+        if (category === 'office') return me.notifyOffice !== false;
+        return me.notifyField !== false;
+      }
+
       function showToast(msg) {
         const toast = document.getElementById('toast');
         const msgEl = document.getElementById('toastMessage');
@@ -1627,8 +1672,9 @@
         }, 2800);
       }
 
-      function showPushBanner(notice) {
-        if (!isUserWorking()) return;
+      function showPushBanner(notice, category) {
+        const cat = category || (notice && notice.category) || 'field';
+        if (!isCategoryNotificationEnabled(cat)) return;
         const banner = document.getElementById('pushBanner');
         const avatar = document.getElementById('pushBannerAvatar');
         const urgentEl = document.getElementById('pushBannerUrgent');
@@ -1645,8 +1691,10 @@
         avatar.textContent = (notice.authorName || '').slice(0, 3);
         urgentEl.classList.toggle('hidden', !notice.isUrgent);
 
-        const targetSuffix = notice.targetPart && notice.targetPart !== '전체' ? ` [${notice.targetPart}]` : '';
-        titleEl.textContent = `[현장] ${notice.authorName} · 민속 알림${targetSuffix}`;
+        const targetPart = normalizePartName(notice.targetPart);
+        const targetSuffix = targetPart && targetPart !== '전체' ? ` [${targetPart}]` : '';
+        const prefix = cat === 'office' ? '[사무실&현장]' : '[현장]';
+        titleEl.textContent = `${prefix} ${notice.authorName} · 민속 알림${targetSuffix}`;
         bodyEl.textContent = notice.content || '';
 
         banner.classList.remove('hidden', 'popup-animate');
@@ -1658,8 +1706,8 @@
         }, notice.isUrgent ? 6500 : 4500);
       }
 
-      function playAlertSound(isUrgent) {
-        if (!isUserWorking()) return;
+      function playAlertSound(isUrgent, category) {
+        if (!isCategoryNotificationEnabled(category || 'field')) return;
         try {
           const AudioContextClass = window.AudioContext || window.webkitAudioContext;
           if (!AudioContextClass) return;
@@ -1703,8 +1751,8 @@
         }
       }
 
-      function triggerVibration(isUrgent) {
-        if (!isUserWorking()) return;
+      function triggerVibration(isUrgent, category) {
+        if (!isCategoryNotificationEnabled(category || 'field')) return;
         try {
           if (navigator && typeof navigator.vibrate === 'function') {
             navigator.vibrate(isUrgent ? [220, 100, 220, 100, 280] : [160]);
@@ -1714,12 +1762,14 @@
         }
       }
 
-      function sendOsNotification(notice) {
-        if (!isUserWorking()) return;
+      function sendOsNotification(notice, category) {
+        const cat = category || (notice && notice.category) || 'field';
+        if (!isCategoryNotificationEnabled(cat)) return;
         try {
           if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
           const iconUrl = getNotificationIconUrl();
-          const title = `[현장] ${notice.isUrgent ? '[긴급] ' : ''}${notice.authorName} · 민속 알림`;
+          const prefix = cat === 'office' ? '[사무실&현장]' : '[현장]';
+          const title = `${prefix} ${notice.isUrgent ? '[긴급] ' : ''}${notice.authorName} · 민속 알림`;
           const n = new Notification(title, {
             body: notice.content || '',
             icon: iconUrl,
@@ -1733,10 +1783,14 @@
           n.onclick = function () {
             try { window.focus(); } catch (e) {}
             if (notice.id) {
-              state.activeTab = 'field';
-              state.selectedNoticeDate = getDateKey();
+              state.activeTab = cat === 'office' ? 'officeField' : 'field';
+              if (cat !== 'office') {
+                state.selectedNoticeDate = getDateKey();
+              }
               renderMainApp();
-              scrollToNoticeCard(notice.id);
+              if (cat !== 'office') {
+                scrollToNoticeCard(notice.id);
+              }
             }
           };
         } catch (e) {
@@ -1823,7 +1877,7 @@
 
         openConfirmModal({
           title: '파트 담당자 휴무 알림',
-          message: `${nextAlert.userName}(${nextAlert.part})님이 휴무로 전환했습니다.\n다른 사람으로 파트를 지정하시겠습니까?`,
+          message: `${nextAlert.userName}(${normalizePartName(nextAlert.part)})님이 휴무로 전환했습니다.\n다른 사람으로 파트를 지정하시겠습니까?`,
           okText: '지정하기',
           cancelText: '나중에',
           onConfirm: function () {
@@ -1898,12 +1952,19 @@
         renderTabUI();
         renderOfficeFieldTab(user);
         renderFieldTab(user);
+        if (window.MinsokInventory && typeof window.MinsokInventory.render === 'function') {
+          window.MinsokInventory.render();
+        }
       }
 
       function renderTabUI() {
         const isOffice = state.activeTab === 'officeField';
+        const isField = state.activeTab === 'field';
+        const isFrozen = state.activeTab === 'frozen';
+
         const officePanel = document.getElementById('officeFieldTabPanel');
         const fieldPanel = document.getElementById('fieldTabPanel');
+        const frozenPanel = document.getElementById('frozenTabPanel');
         const dateHistoryWrapper = document.getElementById('dateHistoryWrapper');
 
         const headerInner = document.getElementById('headerInner');
@@ -1912,35 +1973,45 @@
 
         const tabOfficeBtn = document.getElementById('tabOfficeFieldBtn');
         const tabFieldBtn = document.getElementById('tabFieldBtn');
+        const tabFrozenBtn = document.getElementById('tabFrozenBtn');
+
+        const activeBtnCls = 'relative flex items-center justify-center gap-1.5 py-2.5 px-2 sm:px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-[#B30E2A] text-white shadow-sm';
+        const inactiveBtnCls = 'relative flex items-center justify-center gap-1.5 py-2.5 px-2 sm:px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600';
+
+        officePanel.classList.toggle('hidden', !isOffice);
+        officePanel.classList.toggle('tab-section-hidden', !isOffice);
+        fieldPanel.classList.toggle('hidden', !isField);
+        fieldPanel.classList.toggle('tab-section-hidden', !isField);
+        if (frozenPanel) {
+          frozenPanel.classList.toggle('hidden', !isFrozen);
+          frozenPanel.classList.toggle('tab-section-hidden', !isFrozen);
+        }
+        dateHistoryWrapper.classList.toggle('hidden', !isField);
 
         if (isOffice) {
-          officePanel.classList.remove('hidden', 'tab-section-hidden');
-          fieldPanel.classList.add('hidden', 'tab-section-hidden');
-          dateHistoryWrapper.classList.add('hidden');
-
           headerInner.classList.add('pc-wide-container');
           headerInner.classList.remove('md:max-w-[840px]');
           mainContainer.classList.add('pc-wide-container', 'pc-office-main');
           mainContainer.classList.remove('md:max-w-[840px]');
           bottomTabInner.classList.add('pc-wide-container');
           bottomTabInner.classList.remove('md:max-w-[840px]');
-
-          tabOfficeBtn.className = 'flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-[#B30E2A] text-white shadow-sm';
-          tabFieldBtn.className = 'relative flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600';
         } else {
-          officePanel.classList.add('hidden', 'tab-section-hidden');
-          fieldPanel.classList.remove('hidden', 'tab-section-hidden');
-          dateHistoryWrapper.classList.remove('hidden');
-
           headerInner.classList.remove('pc-wide-container');
           headerInner.classList.add('md:max-w-[840px]');
           mainContainer.classList.remove('pc-wide-container', 'pc-office-main');
           mainContainer.classList.add('md:max-w-[840px]');
           bottomTabInner.classList.remove('pc-wide-container');
           bottomTabInner.classList.add('md:max-w-[840px]');
+        }
 
-          tabFieldBtn.className = 'relative flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-[#B30E2A] text-white shadow-sm';
-          tabOfficeBtn.className = 'flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600';
+        tabOfficeBtn.className = isOffice ? activeBtnCls : inactiveBtnCls;
+        tabFieldBtn.className = isField ? activeBtnCls : inactiveBtnCls;
+        if (tabFrozenBtn) {
+          tabFrozenBtn.className = isFrozen ? activeBtnCls : inactiveBtnCls;
+        }
+
+        if (isFrozen && window.MinsokInventory && typeof window.MinsokInventory.render === 'function') {
+          window.MinsokInventory.render();
         }
       }
 
@@ -2281,7 +2352,7 @@
 
         document.getElementById('noticeTargetHint').textContent = state.composeTargetPart === '전체'
           ? '전체 전원에게 전파됩니다.'
-          : `[${state.composeTargetPart}] 파트 대상으로 전파됩니다. (열람·확인 전원 가능)`;
+          : `[${state.composeTargetPart}] 파트 대상으로 전파됩니다. (열람·확인 전원 가능 / 해당 파트·관리자 업무 수행 가능)`;
 
         // 5. 필터링 및 정렬 (미확인 상단 고정 최신순 -> 확인 완료 하단 최신순)
         const allForDate = (state.noticesByDate[state.selectedNoticeDate] || []).slice();
@@ -2289,6 +2360,9 @@
           const confirmed = Array.isArray(n.confirmedBy) ? n.confirmedBy : [];
           if (state.noticeFilter === 'unread') return !confirmed.includes(user.name);
           if (state.noticeFilter === 'urgent') return !!n.isUrgent;
+          if (PARTS.includes(state.noticeFilter)) {
+            return normalizePartName(n.targetPart) === state.noticeFilter;
+          }
           return true;
         });
 
@@ -2321,8 +2395,9 @@
           const isMeAuthor = item.authorName === user.name;
           const isExpanded = state.expandedNoticeIds.has(item.id);
 
-          const targetPart = item.targetPart || '전체';
-          const canPerformTask = targetPart === '전체' || user.part === targetPart;
+          const targetPart = normalizePartName(item.targetPart) || '전체';
+          // 업무 수행 권한: 전체 대상이거나, 해당 파트 담당자이거나, 관리자(isAdmin === true)인 경우 허용
+          const canPerformTask = targetPart === '전체' || normalizePartName(user.part) === targetPart || user.isAdmin === true;
 
           // 처리자 정보
           const handlerUser = item.handledBy ? getUserByName(item.handledBy) : null;
@@ -2542,6 +2617,7 @@
           const isMe = u.name === me.name;
           const isOnlyAdmin = u.isAdmin && adminCount <= 1;
           const isMaxAdmin = !u.isAdmin && adminCount >= MAX_ADMINS;
+          const userPart = normalizePartName(u.part);
 
           const adminBtnDisabled = isOnlyAdmin || isMaxAdmin;
           const adminBtnText = u.isAdmin ? (isOnlyAdmin ? '관리자(필수)' : '관리자 해제') : '관리자 지정';
@@ -2551,7 +2627,7 @@
 
           const partOptions = [''].concat(PARTS).map(function (p) {
             const label = p === '' ? '파트 미지정' : p;
-            return `<option value="${p}" ${u.part === p ? 'selected' : ''}>${label}</option>`;
+            return `<option value="${p}" ${userPart === p ? 'selected' : ''}>${label}</option>`;
           }).join('');
 
           return `
@@ -2566,7 +2642,7 @@
                       <span class="text-sm font-extrabold text-slate-900">${escapeHtml(u.name)}</span>
                       ${isMe ? '<span class="px-1.5 py-0.5 rounded bg-slate-900 text-white text-[10px] font-bold">나</span>' : ''}
                       ${u.isAdmin ? '<span class="px-1.5 py-0.5 rounded bg-[#B30E2A] text-white text-[10px] font-bold">관리자</span>' : ''}
-                      ${renderPartBadgeHtml(u.part)}
+                      ${renderPartBadgeHtml(userPart)}
                     </div>
                     <p class="text-[11px] font-semibold ${u.workStatus === 'off' ? 'text-slate-400' : 'text-emerald-600'}">
                       ${u.workStatus === 'off' ? '🌙 휴무(연차)' : '🟢 근무 중'}
@@ -2790,11 +2866,11 @@
 
         db.collection(COLLECTIONS.broadcasts).doc(newNotice.id).set(newNotice)
           .then(function () {
-            if (user.notifyField !== false) {
-              playAlertSound(newNotice.isUrgent);
-              triggerVibration(newNotice.isUrgent);
-              showPushBanner(newNotice);
-              sendOsNotification(newNotice);
+            if (isCategoryNotificationEnabled('field')) {
+              playAlertSound(newNotice.isUrgent, 'field');
+              triggerVibration(newNotice.isUrgent, 'field');
+              showPushBanner(newNotice, 'field');
+              sendOsNotification(newNotice, 'field');
             }
             sendFcmPushForNotice(newNotice, user.name);
           })
@@ -2835,9 +2911,9 @@
           showToast(`이미 ${target.handledBy}님이 처리를 완료했습니다.`);
           return;
         }
-        const targetPart = target.targetPart || '전체';
-        if (targetPart !== '전체' && user.part !== targetPart) {
-          showToast(`[${targetPart}] 파트 담당자만 업무를 수행할 수 있습니다.`);
+        const targetPart = normalizePartName(target.targetPart) || '전체';
+        if (targetPart !== '전체' && normalizePartName(user.part) !== targetPart && user.isAdmin !== true) {
+          showToast(`[${targetPart}] 파트 담당자 또는 관리자만 업무를 수행할 수 있습니다.`);
           return;
         }
 
@@ -3040,7 +3116,7 @@
               const newAlert = {
                 id: 'poff_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
                 userName: user.name,
-                part: user.part,
+                part: normalizePartName(user.part),
                 createdAt: Date.now(),
                 dismissedBy: []
               };
@@ -3065,6 +3141,13 @@
           const user = getCurrentUser();
           if (!user || !db) return;
           const nextVal = user.notifyField === false ? true : false;
+          user.notifyField = nextVal;
+          renderNotifySettingsModal();
+          if (!nextVal) {
+            const banner = document.getElementById('pushBanner');
+            if (banner) banner.classList.add('hidden');
+            Object.keys(activeNotificationsMap).forEach(closeOsNotification);
+          }
           db.collection(COLLECTIONS.users).doc(docIdFromName(user.name)).update({
             notifyField: nextVal
           }).then(function () {
@@ -3079,6 +3162,8 @@
           const user = getCurrentUser();
           if (!user || !db) return;
           const nextVal = user.notifyOffice === false ? true : false;
+          user.notifyOffice = nextVal;
+          renderNotifySettingsModal();
           db.collection(COLLECTIONS.users).doc(docIdFromName(user.name)).update({
             notifyOffice: nextVal
           }).then(function () {
@@ -3187,6 +3272,14 @@
           state.activeTab = 'field';
           renderTabUI();
         });
+
+        const tabFrozenBtnEl = document.getElementById('tabFrozenBtn');
+        if (tabFrozenBtnEl) {
+          tabFrozenBtnEl.addEventListener('click', function () {
+            state.activeTab = 'frozen';
+            renderTabUI();
+          });
+        }
 
         // --- 월간 캘린더 컨트롤 및 클릭 ---
         document.getElementById('calPrevMonthBtn').addEventListener('click', function () {
@@ -3490,10 +3583,12 @@
                 lastRemindedAt: remindTs,
                 remindedBy: user ? user.name : ''
               }).then(function () {
-                playAlertSound(true);
-                triggerVibration(true);
-                showPushBanner({ ...target, content: `[재알림] ${target.content}`, isUrgent: true });
-                sendOsNotification({ ...target, content: `[재알림] ${target.content}`, isUrgent: true });
+                if (isCategoryNotificationEnabled('field')) {
+                  playAlertSound(true, 'field');
+                  triggerVibration(true, 'field');
+                  showPushBanner({ ...target, content: `[재알림] ${target.content}`, isUrgent: true }, 'field');
+                  sendOsNotification({ ...target, content: `[재알림] ${target.content}`, isUrgent: true }, 'field');
+                }
                 showToast('미확인 인원에게 재알림을 발송했습니다.');
               }).catch(function (err) {
                 console.error('재알림 발송 오류:', err);
@@ -3564,8 +3659,18 @@
       }
 
       // =========================================================
-      // 13. 초기화 (window.onload)
+      // 13. 외부 모듈(inventory.js) 연동 브리지 및 초기화
       // =========================================================
+      window.MinsokBridge = {
+        getDb: function () { return db; },
+        getCurrentUser: getCurrentUser,
+        showToast: showToast,
+        openConfirmModal: openConfirmModal,
+        escapeHtml: escapeHtml,
+        normalizePartName: normalizePartName,
+        formatMonthDayTime: formatMonthDayTime
+      };
+
       window.onload = function () {
         const authLogo = document.getElementById('authLogoSlot');
         const headerLogo = document.getElementById('headerLogoSlot');
@@ -3574,11 +3679,16 @@
 
         bindEvents();
         initFirestoreListeners();
+        if (window.MinsokInventory && typeof window.MinsokInventory.init === 'function') {
+          window.MinsokInventory.init();
+        }
 
         updateHeaderClockAndMidnightCheck();
         setInterval(updateHeaderClockAndMidnightCheck, 1000);
       };
     })();
   </script>
+  <!-- 냉동재고현황 분리 모듈 -->
+  <script src="/inventory.js"></script>
 </body>
 </html>
