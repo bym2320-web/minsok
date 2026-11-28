@@ -4,11 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>민속 알림 - 현장 전원 실시간 알림 앱</title>
+  <link rel="manifest" href="/manifest.json" />
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Firebase Compat SDK (App / Firestore / Analytics) -->
+  <!-- Firebase Compat SDK (App / Firestore / Analytics / Messaging) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -855,6 +857,7 @@
       const SESSION_LOGIN_KEY = 'minsok_session_user_v4';
       const MAX_ADMINS = 5;
       const HISTORY_DAYS = 7;
+      const FCM_VAPID_KEY = 'BKP95hlVga6hct3AzUB_NBxinhT_T8SCBxiwTflLAJn0AK4HFXSiUmDN_M3CSPyy5HZndUWswB6qt8GF44xXsNs';
 
       const firebaseConfig = {
         apiKey: "AIzaSyDw1ovHdCcr3ttVwZdIjoZXOpDglovF7M4",
@@ -869,6 +872,7 @@
 
       let db = null;
       let analytics = null;
+      let messaging = null;
       try {
         if (typeof firebase !== 'undefined') {
           const fbApp = firebase.apps && firebase.apps.length > 0
@@ -889,6 +893,16 @@
             }
           } catch (analyticsErr) {
             // 미리보기/iframe 환경 Analytics 미지원 무시
+          }
+          try {
+            if (
+              typeof firebase.messaging === 'function' &&
+              (typeof firebase.messaging.isSupported !== 'function' || firebase.messaging.isSupported())
+            ) {
+              messaging = firebase.messaging(fbApp);
+            }
+          } catch (messagingErr) {
+            // 미리보기/iframe 환경 Messaging 미지원 무시
           }
         }
       } catch (fbInitErr) {
@@ -1094,6 +1108,7 @@
       let toastTimer = null;
       let audioCtx = null;
       let lastKnownTodayKey = todayInitial;
+      let lastFcmSyncedKey = null;
 
       // Firestore 실시간 동기화 상태 추적
       const firestoreReady = { users: false, banned: false };
@@ -1383,6 +1398,7 @@
 
       function clearLoginSession() {
         state.currentUserName = null;
+        lastFcmSyncedKey = null;
         try {
           localStorage.removeItem(AUTO_LOGIN_KEY);
           sessionStorage.removeItem(SESSION_LOGIN_KEY);
@@ -1392,8 +1408,99 @@
       }
 
       // =========================================================
-      // 6. 알림, 소리, 진동, 배지, 토스트 (미리보기 오류 방지 try-catch)
+      // 6. 알림, 소리, 진동, 배지, 토스트, FCM 푸시 (미리보기 오류 방지 try-catch)
       // =========================================================
+      function syncFcmTokenForCurrentUser(user) {
+        try {
+          if (!user || user.workStatus === 'off' || !db || !messaging) return;
+          if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) return;
+
+          // 미리보기(about:srcdoc, blob:, file:) 환경에서는 SW/FCM 호출 생략
+          const proto = window.location && window.location.protocol;
+          const host = window.location && window.location.hostname;
+          const isSecureOrigin = proto === 'https:' || host === 'localhost' || host === '127.0.0.1';
+          if (!isSecureOrigin) return;
+
+          const syncKey = user.name + ':' + (user.workStatus || 'working');
+          if (lastFcmSyncedKey === syncKey && user.fcmToken) return;
+          lastFcmSyncedKey = syncKey;
+
+          const obtainAndSaveToken = function () {
+            try {
+              if (Notification.permission !== 'granted') return;
+              navigator.serviceWorker.register('/firebase-messaging-sw.js')
+                .then(function (registration) {
+                  return messaging.getToken({
+                    vapidKey: FCM_VAPID_KEY,
+                    serviceWorkerRegistration: registration
+                  });
+                })
+                .then(function (token) {
+                  if (!token) return;
+                  if (user.fcmToken !== token) {
+                    return db.collection(COLLECTIONS.users).doc(docIdFromName(user.name)).update({
+                      fcmToken: token
+                    });
+                  }
+                })
+                .catch(function () {
+                  // 배포 전/미리보기 환경 SW 또는 토큰 발급 실패 무시
+                });
+            } catch (e) {
+              // ignore
+            }
+          };
+
+          if (Notification.permission === 'granted') {
+            obtainAndSaveToken();
+          } else if (Notification.permission === 'default' && typeof Notification.requestPermission === 'function') {
+            Promise.resolve(Notification.requestPermission()).then(function (perm) {
+              if (perm === 'granted') {
+                obtainAndSaveToken();
+              }
+            }).catch(function () {});
+          }
+        } catch (e) {
+          // 미리보기/보안 제한 환경 오류 방지
+        }
+      }
+
+      function sendFcmPushForNotice(notice, senderName) {
+        try {
+          if (!db || !notice) return;
+          const targetPart = notice.targetPart || '전체';
+
+          db.collection(COLLECTIONS.users).get().then(function (snapshot) {
+            const tokenSet = new Set();
+            snapshot.forEach(function (doc) {
+              const u = doc.data();
+              if (!u || !u.fcmToken) return;
+              if (u.workStatus === 'off') return;
+              if (u.name === senderName) return;
+              if (targetPart !== '전체' && u.part !== targetPart) return;
+              tokenSet.add(u.fcmToken);
+            });
+
+            const tokens = Array.from(tokenSet);
+            if (tokens.length === 0) return;
+
+            const targetSuffix = targetPart !== '전체' ? ` [${targetPart}]` : '';
+            const title = `${notice.isUrgent ? '[긴급] ' : ''}${notice.authorName} · 민속 알림${targetSuffix}`;
+            const body = notice.content || '';
+
+            fetch('/api/send-push', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tokens: tokens, title: title, body: body })
+            }).catch(function () {
+              // 미리보기/로컬 환경 API 미존재 시 무시
+            });
+          }).catch(function () {});
+        } catch (e) {
+          // ignore
+        }
+      }
+
       function isUserWorking() {
         const me = getCurrentUser();
         return !!(me && me.workStatus !== 'off');
@@ -1637,44 +1744,8 @@
         appView.classList.remove('hidden');
         renderMainApp();
         checkPendingPartOffAlerts();
-      }
-
-      function renderMainApp() {
-        const user = getCurrentUser();
-        if (!user) return;
-        renderHeader(user);
-        renderTabUI();
-        renderOfficeFieldTab(user);
-        renderFieldTab(user);
-      }
-
-      function renderHeader(user) {
-        // 사용자 배지
-        const badge = document.getElementById('currentUserBadge');
-        badge.innerHTML = `
-          <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color:${escapeHtml(user.color || '#B30E2A')};"></span>
-          <span>${escapeHtml(user.name)}</span>
-          ${renderPartBadgeHtml(user.part)}
-        `;
-
-        // 근무 중 / 휴무(연차) 토글
-        const workBtn = document.getElementById('workStatusToggleBtn');
-        if (user.workStatus === 'off') {
-          workBtn.className = 'px-2.5 py-1.5 rounded-xl text-xs font-extrabold border transition cursor-pointer whitespace-nowrap flex items-center gap-1 bg-slate-100 border-slate-300 text-slate-500 hover:bg-slate-200';
-          workBtn.innerHTML = '<span>🌙</span><span>휴무(알림 OFF)</span>';
-        } else {
-          workBtn.className = 'px-2.5 py-1.5 rounded-xl text-xs font-extrabold border transition cursor-pointer whitespace-nowrap flex items-center gap-1 bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100';
-          workBtn.innerHTML = '<span>🟢</span><span>근무 중</span>';
-        }
-
-        // 관리자 버튼 (관리자만 표시)
-        const adminBtn = document.getElementById('openAdminBtn');
-        const adminCount = state.users.filter((u) => u.isAdmin).length;
-        if (user.isAdmin) {
-          adminBtn.classList.remove('hidden');
-          adminBtn.textContent = `관리자 ${adminCount}/${MAX_ADMINS}`;
-        } else {
-          adminBtn.classList.add('hidden');
+        if (user.workStatus !== 'off') {
+          syncFcmTokenForCurrentUser(user);
         }
       }
 
@@ -2535,6 +2606,7 @@
             triggerVibration(newNotice.isUrgent);
             showPushBanner(newNotice);
             sendOsNotification(newNotice);
+            sendFcmPushForNotice(newNotice, user.name);
           })
           .catch(function (err) {
             console.error('전파 저장 오류:', err);
@@ -2765,6 +2837,12 @@
           db.collection(COLLECTIONS.users).doc(docIdFromName(user.name)).update({
             workStatus: nextStatus
           }).then(function () {
+            if (nextStatus === 'working') {
+              lastFcmSyncedKey = null;
+              syncFcmTokenForCurrentUser(Object.assign({}, user, { workStatus: 'working' }));
+            } else {
+              lastFcmSyncedKey = null;
+            }
             if (nextStatus === 'off' && user.part) {
               const newAlert = {
                 id: 'poff_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
