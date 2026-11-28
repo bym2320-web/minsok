@@ -362,7 +362,7 @@
             </div>
           </div>
 
-          <!-- 우측: 사용자 배지, 근무/휴무 토글, 관리자(N/5), 로그아웃 -->
+          <!-- 우측: 사용자 배지, 근무/휴무 토글, 알림 설정, 관리자(N/5), 로그아웃 -->
           <div class="flex items-center gap-1.5 flex-wrap justify-end">
             <!-- 현재 사용자 배지 (이름 + 파트) -->
             <div id="currentUserBadge" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200/80 text-xs font-extrabold text-slate-800 whitespace-nowrap"></div>
@@ -373,6 +373,16 @@
               type="button"
               class="px-2.5 py-1.5 rounded-xl text-xs font-extrabold border transition cursor-pointer whitespace-nowrap flex items-center gap-1"
             ></button>
+
+            <!-- 카테고리별 알림 ON/OFF 설정 버튼 -->
+            <button
+              id="openNotifySettingsBtn"
+              type="button"
+              class="px-2.5 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-extrabold transition cursor-pointer whitespace-nowrap flex items-center gap-1"
+            >
+              <span>🔔</span>
+              <span>알림 설정</span>
+            </button>
 
             <!-- 관리자 버튼 (관리자만 표시) -->
             <button
@@ -693,8 +703,61 @@
   </div>
 
   <!-- ========================================================= -->
-  <!-- 3. 모달들 (관리자 / 일정 상세 / 일정 추가·수정 / 확인창)    -->
+  <!-- 3. 모달들 (알림 설정 / 관리자 / 일정 상세 / 일정 추가·수정 / 확인창) -->
   <!-- ========================================================= -->
+
+  <!-- 카테고리별 알림 설정 모달 -->
+  <div id="notifySettingsModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="w-full max-w-[400px] bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-2">
+        <div>
+          <h3 class="text-base font-extrabold text-slate-900">카테고리별 알림 설정</h3>
+          <p class="text-[11px] font-semibold text-slate-500 mt-0.5">수신할 푸시 알림 카테고리를 선택하세요.</p>
+        </div>
+        <button id="closeNotifySettingsBtn" type="button" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold cursor-pointer">✕</button>
+      </div>
+
+      <div class="p-5 space-y-3">
+        <!-- 현장 알림 ON/OFF -->
+        <div class="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
+          <div class="min-w-0">
+            <p class="text-sm font-extrabold text-slate-900">📢 현장 알림</p>
+            <p class="text-[11px] font-medium text-slate-500 mt-0.5">전원 전파 및 파트별·긴급 알림 수신</p>
+          </div>
+          <button
+            id="toggleNotifyFieldBtn"
+            type="button"
+            role="switch"
+            aria-checked="true"
+            class="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors cursor-pointer bg-[#B30E2A]"
+          >
+            <span id="toggleNotifyFieldKnob" class="inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform translate-x-6"></span>
+          </button>
+        </div>
+
+        <!-- 사무실&현장 알림 ON/OFF -->
+        <div class="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
+          <div class="min-w-0">
+            <p class="text-sm font-extrabold text-slate-900">📅 사무실&amp;현장 알림</p>
+            <p class="text-[11px] font-medium text-slate-500 mt-0.5">사무실 전달 사항·현장 보고 등록 알림 수신</p>
+          </div>
+          <button
+            id="toggleNotifyOfficeBtn"
+            type="button"
+            role="switch"
+            aria-checked="true"
+            class="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors cursor-pointer bg-[#B30E2A]"
+          >
+            <span id="toggleNotifyOfficeKnob" class="inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform translate-x-6"></span>
+          </button>
+        </div>
+
+        <p class="text-[11px] font-medium text-slate-400 leading-relaxed pt-1">
+          ※ 상단 상태가 <strong class="text-slate-600">휴무(연차)</strong>로 설정된 경우에는 위 설정과 관계없이 모든 푸시 알림이 자동으로 차단됩니다.
+        </p>
+      </div>
+    </div>
+  </div>
 
   <!-- 관리자 모달 (최대 5명 권한 관리, 파트 지정, 회원 강퇴) -->
   <div id="adminModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3">
@@ -1135,6 +1198,7 @@
           if (!me || state.bannedNames.includes(state.currentUserName)) {
             clearLoginSession();
             closeAdminModal();
+            closeNotifySettingsModal();
             renderApp();
             showToast('계정이 삭제되었거나 차단되어 로그아웃되었습니다.');
             return;
@@ -1145,6 +1209,10 @@
         const adminModal = document.getElementById('adminModal');
         if (adminModal && !adminModal.classList.contains('hidden')) {
           renderAdminModalList();
+        }
+        const notifyModal = document.getElementById('notifySettingsModal');
+        if (notifyModal && !notifyModal.classList.contains('hidden')) {
+          renderNotifySettingsModal();
         }
       }
 
@@ -1240,28 +1308,30 @@
           if (me) {
             renderFieldTab(me);
 
-            incomingNotices.forEach(function (ntc) {
-              if (ntc.authorName !== me.name) {
-                playAlertSound(!!ntc.isUrgent);
-                triggerVibration(!!ntc.isUrgent);
-                showPushBanner(ntc);
-                sendOsNotification(ntc);
-              }
-            });
+            if (me.notifyField !== false) {
+              incomingNotices.forEach(function (ntc) {
+                if (ntc.authorName !== me.name) {
+                  playAlertSound(!!ntc.isUrgent);
+                  triggerVibration(!!ntc.isUrgent);
+                  showPushBanner(ntc);
+                  sendOsNotification(ntc);
+                }
+              });
 
-            incomingReminders.forEach(function (ntc) {
-              const confirmed = Array.isArray(ntc.confirmedBy) ? ntc.confirmedBy : [];
-              if (!confirmed.includes(me.name)) {
-                const remindPayload = Object.assign({}, ntc, {
-                  content: '[재알림] ' + ntc.content,
-                  isUrgent: true
-                });
-                playAlertSound(true);
-                triggerVibration(true);
-                showPushBanner(remindPayload);
-                sendOsNotification(remindPayload);
-              }
-            });
+              incomingReminders.forEach(function (ntc) {
+                const confirmed = Array.isArray(ntc.confirmedBy) ? ntc.confirmedBy : [];
+                if (!confirmed.includes(me.name)) {
+                  const remindPayload = Object.assign({}, ntc, {
+                    content: '[재알림] ' + ntc.content,
+                    isUrgent: true
+                  });
+                  playAlertSound(true);
+                  triggerVibration(true);
+                  showPushBanner(remindPayload);
+                  sendOsNotification(remindPayload);
+                }
+              });
+            }
           }
         }, function (err) {
           console.error('broadcasts onSnapshot 오류:', err);
@@ -1465,6 +1535,7 @@
         }
       }
 
+      // [현장] 탭 전파 시 푸시 발송 (근무 중 + notifyField ON 대상자)
       function sendFcmPushForNotice(notice, senderName) {
         try {
           if (!db || !notice) return;
@@ -1476,6 +1547,7 @@
               const u = doc.data();
               if (!u || !u.fcmToken) return;
               if (u.workStatus === 'off') return;
+              if (u.notifyField === false) return;
               if (u.name === senderName) return;
               if (targetPart !== '전체' && u.part !== targetPart) return;
               tokenSet.add(u.fcmToken);
@@ -1485,8 +1557,43 @@
             if (tokens.length === 0) return;
 
             const targetSuffix = targetPart !== '전체' ? ` [${targetPart}]` : '';
-            const title = `${notice.isUrgent ? '[긴급] ' : ''}${notice.authorName} · 민속 알림${targetSuffix}`;
+            const title = `[현장] ${notice.isUrgent ? '[긴급] ' : ''}${notice.authorName} · 민속 알림${targetSuffix}`;
             const body = notice.content || '';
+
+            fetch('/api/send-push', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tokens: tokens, title: title, body: body })
+            }).catch(function () {
+              // 미리보기/로컬 환경 API 미존재 시 무시
+            });
+          }).catch(function () {});
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      // [사무실&현장] 새 글 등록 시 푸시 발송 (근무 중 + notifyOffice ON 대상자)
+      function sendFcmPushForOfficePost(post, postTypeLabel, senderName) {
+        try {
+          if (!db || !post) return;
+
+          db.collection(COLLECTIONS.users).get().then(function (snapshot) {
+            const tokenSet = new Set();
+            snapshot.forEach(function (doc) {
+              const u = doc.data();
+              if (!u || !u.fcmToken) return;
+              if (u.workStatus === 'off') return;
+              if (u.notifyOffice === false) return;
+              if (u.name === senderName) return;
+              tokenSet.add(u.fcmToken);
+            });
+
+            const tokens = Array.from(tokenSet);
+            if (tokens.length === 0) return;
+
+            const title = `[사무실&현장] ${post.authorName} (${postTypeLabel})`;
+            const body = post.content || '';
 
             fetch('/api/send-push', {
               method: 'POST',
@@ -1539,7 +1646,7 @@
         urgentEl.classList.toggle('hidden', !notice.isUrgent);
 
         const targetSuffix = notice.targetPart && notice.targetPart !== '전체' ? ` [${notice.targetPart}]` : '';
-        titleEl.textContent = `${notice.authorName} · 민속 알림${targetSuffix}`;
+        titleEl.textContent = `[현장] ${notice.authorName} · 민속 알림${targetSuffix}`;
         bodyEl.textContent = notice.content || '';
 
         banner.classList.remove('hidden', 'popup-animate');
@@ -1612,7 +1719,7 @@
         try {
           if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
           const iconUrl = getNotificationIconUrl();
-          const title = (notice.isUrgent ? '[긴급] ' : '') + `${notice.authorName} · 민속 알림`;
+          const title = `[현장] ${notice.isUrgent ? '[긴급] ' : ''}${notice.authorName} · 민속 알림`;
           const n = new Notification(title, {
             body: notice.content || '',
             icon: iconUrl,
@@ -2376,8 +2483,43 @@
       }
 
       // =========================================================
-      // 9. 모달 제어 (관리자 / 일정 상세 / 일정 추가·수정)
+      // 9. 모달 제어 (알림 설정 / 관리자 / 일정 상세 / 일정 추가·수정)
       // =========================================================
+      function renderNotifySettingsModal() {
+        const user = getCurrentUser();
+        if (!user) return;
+        const fieldOn = user.notifyField !== false;
+        const officeOn = user.notifyOffice !== false;
+
+        const fieldBtn = document.getElementById('toggleNotifyFieldBtn');
+        const fieldKnob = document.getElementById('toggleNotifyFieldKnob');
+        if (fieldBtn && fieldKnob) {
+          fieldBtn.setAttribute('aria-checked', String(fieldOn));
+          fieldBtn.className = `relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors cursor-pointer ${fieldOn ? 'bg-[#B30E2A]' : 'bg-slate-300'}`;
+          fieldKnob.className = `inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${fieldOn ? 'translate-x-6' : 'translate-x-1'}`;
+        }
+
+        const officeBtn = document.getElementById('toggleNotifyOfficeBtn');
+        const officeKnob = document.getElementById('toggleNotifyOfficeKnob');
+        if (officeBtn && officeKnob) {
+          officeBtn.setAttribute('aria-checked', String(officeOn));
+          officeBtn.className = `relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors cursor-pointer ${officeOn ? 'bg-[#B30E2A]' : 'bg-slate-300'}`;
+          officeKnob.className = `inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${officeOn ? 'translate-x-6' : 'translate-x-1'}`;
+        }
+      }
+
+      function openNotifySettingsModal() {
+        const user = getCurrentUser();
+        if (!user) return;
+        renderNotifySettingsModal();
+        document.getElementById('notifySettingsModal').classList.remove('hidden');
+      }
+
+      function closeNotifySettingsModal() {
+        const modal = document.getElementById('notifySettingsModal');
+        if (modal) modal.classList.add('hidden');
+      }
+
       function openAdminModal() {
         const me = getCurrentUser();
         if (!me || !me.isAdmin) return;
@@ -2573,6 +2715,7 @@
         db.collection(COLLECTIONS.officePosts).doc(newPost.id).set(newPost)
           .then(function () {
             showToast('사무실 전달 사항이 등록되었습니다.');
+            sendFcmPushForOfficePost(newPost, '사무실', user.name);
           })
           .catch(function (err) {
             console.error('사무실 글 저장 오류:', err);
@@ -2607,6 +2750,7 @@
         db.collection(COLLECTIONS.fieldPosts).doc(newPost.id).set(newPost)
           .then(function () {
             showToast('현장 보고 사항이 등록되었습니다.');
+            sendFcmPushForOfficePost(newPost, '현장', user.name);
           })
           .catch(function (err) {
             console.error('현장 보고 저장 오류:', err);
@@ -2646,10 +2790,12 @@
 
         db.collection(COLLECTIONS.broadcasts).doc(newNotice.id).set(newNotice)
           .then(function () {
-            playAlertSound(newNotice.isUrgent);
-            triggerVibration(newNotice.isUrgent);
-            showPushBanner(newNotice);
-            sendOsNotification(newNotice);
+            if (user.notifyField !== false) {
+              playAlertSound(newNotice.isUrgent);
+              triggerVibration(newNotice.isUrgent);
+              showPushBanner(newNotice);
+              sendOsNotification(newNotice);
+            }
             sendFcmPushForNotice(newNotice, user.name);
           })
           .catch(function (err) {
@@ -2839,6 +2985,8 @@
             isAdmin: isFirstUser,
             part: '',
             workStatus: 'working',
+            notifyField: true,
+            notifyOffice: true,
             createdAt: Date.now()
           };
 
@@ -2868,6 +3016,7 @@
         document.getElementById('logoutBtn').addEventListener('click', function () {
           clearLoginSession();
           closeAdminModal();
+          closeNotifySettingsModal();
           renderApp();
           showToast('로그아웃되었습니다.');
         });
@@ -2902,6 +3051,41 @@
           }).catch(function (err) {
             console.error('근무 상태 변경 오류:', err);
             showToast('상태 변경 중 오류가 발생했습니다.');
+          });
+        });
+
+        // --- 카테고리별 알림 설정 모달 ---
+        document.getElementById('openNotifySettingsBtn').addEventListener('click', openNotifySettingsModal);
+        document.getElementById('closeNotifySettingsBtn').addEventListener('click', closeNotifySettingsModal);
+        document.getElementById('notifySettingsModal').addEventListener('click', function (e) {
+          if (e.target === this) closeNotifySettingsModal();
+        });
+
+        document.getElementById('toggleNotifyFieldBtn').addEventListener('click', function () {
+          const user = getCurrentUser();
+          if (!user || !db) return;
+          const nextVal = user.notifyField === false ? true : false;
+          db.collection(COLLECTIONS.users).doc(docIdFromName(user.name)).update({
+            notifyField: nextVal
+          }).then(function () {
+            showToast(nextVal ? '[현장 알림]이 켜졌습니다.' : '[현장 알림]이 꺼졌습니다.');
+          }).catch(function (err) {
+            console.error('현장 알림 설정 오류:', err);
+            showToast('알림 설정 변경 중 오류가 발생했습니다.');
+          });
+        });
+
+        document.getElementById('toggleNotifyOfficeBtn').addEventListener('click', function () {
+          const user = getCurrentUser();
+          if (!user || !db) return;
+          const nextVal = user.notifyOffice === false ? true : false;
+          db.collection(COLLECTIONS.users).doc(docIdFromName(user.name)).update({
+            notifyOffice: nextVal
+          }).then(function () {
+            showToast(nextVal ? '[사무실&현장 알림]이 켜졌습니다.' : '[사무실&현장 알림]이 꺼졌습니다.');
+          }).catch(function (err) {
+            console.error('사무실&현장 알림 설정 오류:', err);
+            showToast('알림 설정 변경 중 오류가 발생했습니다.');
           });
         });
 
