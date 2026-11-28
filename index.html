@@ -697,7 +697,7 @@
 
     </main>
 
-    <!-- 하단 고정 4개 카테고리 탭 바 -->
+    <!-- 하단 고정 카테고리 탭 바 (사무실&현장 / 현장 / 한우스펙&발주 / 냉동재고 / 짝갈비배송) -->
     <nav class="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur border-t border-slate-200 py-2 shadow-[0_-4px_12px_rgba(15,23,42,0.05)]">
       <div id="bottomTabInner" class="w-full pc-wide-container mx-auto px-2 md:px-4 grid grid-cols-4 gap-1.5 sm:gap-2 transition-all">
         <button
@@ -718,6 +718,14 @@
           <span id="fieldTabUnreadBadge" class="hidden ml-0.5 px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-extrabold leading-none">0</span>
         </button>
         <button
+          id="tabHanwooSpecBtn"
+          type="button"
+          class="hidden flex items-center justify-center gap-1 py-2.5 px-1.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600"
+        >
+          <span>📋</span>
+          <span class="truncate">한우스펙&amp;발주</span>
+        </button>
+        <button
           id="tabFrozenBtn"
           type="button"
           class="flex items-center justify-center gap-1 py-2.5 px-1.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600"
@@ -732,14 +740,6 @@
         >
           <span>🥩</span>
           <span class="truncate">짝갈비배송</span>
-        </button>
-        <button
-          id="tabHanwooSpecBtn"
-          type="button"
-          class="hidden flex items-center justify-center gap-1 py-2.5 px-1.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600"
-        >
-          <span>📋</span>
-          <span class="truncate">한우스펙&amp;발주</span>
         </button>
       </div>
     </nav>
