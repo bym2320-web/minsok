@@ -14,13 +14,31 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+// 중복 알림 방지: Firebase가 자동 표시하는 notification 메시지는 다시 띄우지 않음
 messaging.onBackgroundMessage((payload) => {
-  const title = payload.notification?.title || '민속 알림';
+  if (payload.notification) return;
+  const title = payload.data?.title || '민속 알림';
   const options = {
-    body: payload.notification?.body || '새로운 현장 전파가 도착했습니다.',
+    body: payload.data?.body || '새로운 알림이 도착했습니다.',
     icon: '/logo.png',
-    badge: '/logo.png',
-    requireInteraction: true
+    badge: '/logo.png'
   };
   self.registration.showNotification(title, options);
+});
+
+// 휴대폰에서 푸시 알림을 누르면 민속 알림 앱으로 바로 이동
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes('minsok.vercel.app') && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow('/');
+      }
+    })
+  );
 });
