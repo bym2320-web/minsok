@@ -1749,6 +1749,50 @@
         }
       }
 
+      function renderMainApp() {
+        const user = getCurrentUser();
+        if (!user) return;
+
+        // 1. 상단 사용자 배지 (고유 색상 도트 + 이름 + 담당 파트)
+        const userBadge = document.getElementById('currentUserBadge');
+        if (userBadge) {
+          userBadge.innerHTML = `
+            <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color:${escapeHtml(user.color || '#B30E2A')};"></span>
+            <span>${escapeHtml(user.name)}</span>
+            ${renderPartBadgeHtml(user.part)}
+          `;
+        }
+
+        // 2. 근무 중 / 휴무(연차) 상태 토글 버튼
+        const workBtn = document.getElementById('workStatusToggleBtn');
+        if (workBtn) {
+          if (user.workStatus === 'off') {
+            workBtn.className = 'px-2.5 py-1.5 rounded-xl text-xs font-extrabold border transition cursor-pointer whitespace-nowrap flex items-center gap-1 bg-slate-100 border-slate-300 text-slate-500 hover:bg-slate-200/70';
+            workBtn.innerHTML = '<span>🌙</span><span>휴무(연차)</span>';
+          } else {
+            workBtn.className = 'px-2.5 py-1.5 rounded-xl text-xs font-extrabold border transition cursor-pointer whitespace-nowrap flex items-center gap-1 bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100';
+            workBtn.innerHTML = '<span>🟢</span><span>근무 중</span>';
+          }
+        }
+
+        // 3. 관리자 버튼 (관리자 계정에게만 표시, 최대 5명 현황)
+        const adminBtn = document.getElementById('openAdminBtn');
+        if (adminBtn) {
+          if (user.isAdmin) {
+            const adminCount = state.users.filter((u) => u.isAdmin).length;
+            adminBtn.textContent = `관리자 ${adminCount}/${MAX_ADMINS}`;
+            adminBtn.classList.remove('hidden');
+          } else {
+            adminBtn.classList.add('hidden');
+          }
+        }
+
+        // 4. 탭 UI 및 각 탭 콘텐츠 렌더링
+        renderTabUI();
+        renderOfficeFieldTab(user);
+        renderFieldTab(user);
+      }
+
       function renderTabUI() {
         const isOffice = state.activeTab === 'officeField';
         const officePanel = document.getElementById('officeFieldTabPanel');
