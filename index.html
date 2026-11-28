@@ -690,6 +690,11 @@
       <!-- ===================================================== -->
       <div id="ribsTabPanel" class="hidden tab-section-hidden space-y-4"></div>
 
+      <!-- ===================================================== -->
+      <!-- 탭 5: [한우 스펙&발주] 관리자·한우정리 전용             -->
+      <!-- ===================================================== -->
+      <div id="hanwooSpecTabPanel" class="hidden tab-section-hidden space-y-4"></div>
+
     </main>
 
     <!-- 하단 고정 4개 카테고리 탭 바 -->
@@ -727,6 +732,14 @@
         >
           <span>🥩</span>
           <span class="truncate">짝갈비배송</span>
+        </button>
+        <button
+          id="tabHanwooSpecBtn"
+          type="button"
+          class="hidden flex items-center justify-center gap-1 py-2.5 px-1.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600"
+        >
+          <span>📋</span>
+          <span class="truncate">한우스펙&amp;발주</span>
         </button>
       </div>
     </nav>
@@ -779,6 +792,24 @@
             class="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors cursor-pointer bg-[#B30E2A]"
           >
             <span id="toggleNotifyOfficeKnob" class="inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform translate-x-6"></span>
+          </button>
+        </div>
+
+        <!-- 모바일/PC 푸시 알림 직접 연결 버튼 (iOS 사파리·안드로이드 크롬 권한 정책 대응) -->
+        <div class="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200/80 space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-extrabold text-slate-800">📱 기기 푸시 알림 연결</span>
+            <span id="pushConnectStatusBadge" class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-200 text-slate-600">확인 중</span>
+          </div>
+          <p class="text-[11px] font-medium text-slate-500 leading-snug">
+            알림이 오지 않거나 새 기기(PC/스마트폰)에서 처음 접속했다면 아래 버튼을 눌러 푸시 알림을 연결해 주세요.
+          </p>
+          <button
+            id="connectPushBtn"
+            type="button"
+            class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-xs font-extrabold shadow-sm transition cursor-pointer"
+          >
+            🔔 푸시 알림 연결하기 (현재 기기)
           </button>
         </div>
 
@@ -1533,14 +1564,32 @@
       // =========================================================
       // 6. 알림, 소리, 진동, 배지, 토스트, FCM 푸시 (미리보기 오류 방지 try-catch)
       // =========================================================
-      function syncFcmTokenForCurrentUser(user) {
+      function collectUserTokens(u, tokenSet) {
+        if (!u) return;
+        if (Array.isArray(u.fcmTokens)) {
+          u.fcmTokens.forEach(function (t) { if (t) tokenSet.add(t); });
+        }
+        if (u.fcmToken) tokenSet.add(u.fcmToken);
+      }
+
+      function syncFcmTokenForCurrentUser(user, forcePrompt) {
         try {
-          if (!IS_PROD_HOST) return;
-          if (!user || user.workStatus === 'off' || !db || !messaging) return;
-          if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) return;
+          if (!IS_PROD_HOST) {
+            if (forcePrompt) showToast('실제 배포 주소(minsok.vercel.app)에서만 푸시 연결이 가능합니다.');
+            return;
+          }
+          if (!user || !db || !messaging) {
+            if (forcePrompt) showToast('현재 브라우저에서는 푸시 알림을 지원하지 않습니다. (크롬/사파리 홈 화면 앱 권장)');
+            return;
+          }
+          if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) {
+            if (forcePrompt) showToast('이 기기/브라우저에서는 푸시 알림을 지원하지 않습니다.');
+            return;
+          }
+          if (!forcePrompt && user.workStatus === 'off') return;
 
           const syncKey = user.name + ':' + (user.workStatus || 'working');
-          if (lastFcmSyncedKey === syncKey && user.fcmToken) return;
+          if (!forcePrompt && lastFcmSyncedKey === syncKey) return;
           lastFcmSyncedKey = syncKey;
 
           const obtainAndSaveToken = function () {
@@ -1554,15 +1603,28 @@
                   });
                 })
                 .then(function (token) {
-                  if (!token) return;
-                  if (user.fcmToken !== token) {
+                  if (!token) {
+                    if (forcePrompt) showToast('푸시 토큰 발급에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+                    return;
+                  }
+                  const existingTokens = Array.isArray(user.fcmTokens) ? user.fcmTokens : [];
+                  if (user.fcmToken !== token || !existingTokens.includes(token)) {
                     return db.collection(COLLECTIONS.users).doc(docIdFromName(user.name)).update({
-                      fcmToken: token
+                      fcmToken: token,
+                      fcmTokens: firebase.firestore.FieldValue.arrayUnion(token)
+                    }).then(function () {
+                      if (forcePrompt) {
+                        showToast('현재 기기 푸시 알림 연결이 완료되었습니다!');
+                        renderNotifySettingsModal();
+                      }
                     });
+                  } else if (forcePrompt) {
+                    showToast('이미 현재 기기에 푸시 알림이 연결되어 있습니다.');
+                    renderNotifySettingsModal();
                   }
                 })
                 .catch(function () {
-                  // 배포 전/미리보기 환경 SW 또는 토큰 발급 실패 무시
+                  if (forcePrompt) showToast('푸시 연결 중 오류가 발생했습니다. 브라우저 알림 권한을 확인해 주세요.');
                 });
             } catch (e) {
               // ignore
@@ -1571,10 +1633,18 @@
 
           if (Notification.permission === 'granted') {
             obtainAndSaveToken();
-          } else if (Notification.permission === 'default' && typeof Notification.requestPermission === 'function') {
+          } else if (Notification.permission === 'denied') {
+            if (forcePrompt) {
+              showToast('브라우저에서 알림이 차단되어 있습니다. 주소창 설정에서 알림을 허용해 주세요.');
+              renderNotifySettingsModal();
+            }
+          } else if (typeof Notification.requestPermission === 'function') {
             Promise.resolve(Notification.requestPermission()).then(function (perm) {
               if (perm === 'granted') {
                 obtainAndSaveToken();
+              } else if (forcePrompt) {
+                showToast('알림 권한이 허용되지 않았습니다.');
+                renderNotifySettingsModal();
               }
             }).catch(function () {});
           }
@@ -1583,7 +1653,7 @@
         }
       }
 
-      // [현장] 탭 전파 시 푸시 발송 (근무 중 + notifyField ON 대상자)
+      // [현장] 탭 전파 시 푸시 발송 (근무 중 + notifyField ON 대상자, 다중 기기 지원)
       function sendFcmPushForNotice(notice, senderName) {
         try {
           if (!IS_PROD_HOST) return;
@@ -1594,12 +1664,11 @@
             const tokenSet = new Set();
             snapshot.forEach(function (doc) {
               const u = doc.data();
-              if (!u || !u.fcmToken) return;
-              if (u.workStatus === 'off') return;
+              if (!u || u.workStatus === 'off') return;
               if (u.notifyField === false) return;
               if (u.name === senderName) return;
               if (targetPart !== '전체' && normalizePartName(u.part) !== targetPart) return;
-              tokenSet.add(u.fcmToken);
+              collectUserTokens(u, tokenSet);
             });
 
             const tokens = Array.from(tokenSet);
@@ -1613,16 +1682,12 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ tokens: tokens, title: title, body: body })
-            }).catch(function () {
-              // 미리보기/로컬 환경 API 미존재 시 무시
-            });
+            }).catch(function () {});
           }).catch(function () {});
-        } catch (e) {
-          // ignore
-        }
+        } catch (e) {}
       }
 
-      // [사무실&현장] 새 글 등록 시 푸시 발송 (근무 중 + notifyOffice ON 대상자)
+      // [사무실&현장] 새 글 등록 시 푸시 발송 (근무 중 + notifyOffice ON 대상자, 다중 기기 지원)
       function sendFcmPushForOfficePost(post, postTypeLabel, senderName) {
         try {
           if (!IS_PROD_HOST) return;
@@ -1632,11 +1697,10 @@
             const tokenSet = new Set();
             snapshot.forEach(function (doc) {
               const u = doc.data();
-              if (!u || !u.fcmToken) return;
-              if (u.workStatus === 'off') return;
+              if (!u || u.workStatus === 'off') return;
               if (u.notifyOffice === false) return;
               if (u.name === senderName) return;
-              tokenSet.add(u.fcmToken);
+              collectUserTokens(u, tokenSet);
             });
 
             const tokens = Array.from(tokenSet);
@@ -1649,16 +1713,12 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ tokens: tokens, title: title, body: body })
-            }).catch(function () {
-              // 미리보기/로컬 환경 API 미존재 시 무시
-            });
+            }).catch(function () {});
           }).catch(function () {});
-        } catch (e) {
-          // ignore
-        }
+        } catch (e) {}
       }
 
-      // [짝갈비 배송] 공지/수정 시 푸시 발송 (근무 중인 전 직원 대상)
+      // [짝갈비 배송] 공지/수정 시 푸시 발송 (근무 중인 전 직원 대상, 다중 기기 지원)
       function sendFcmPushForRibs(bodyText, senderName) {
         try {
           if (!IS_PROD_HOST) return;
@@ -1668,10 +1728,9 @@
             const tokenSet = new Set();
             snapshot.forEach(function (doc) {
               const u = doc.data();
-              if (!u || !u.fcmToken) return;
-              if (u.workStatus === 'off') return;
+              if (!u || u.workStatus === 'off') return;
               if (u.name === senderName) return;
-              tokenSet.add(u.fcmToken);
+              collectUserTokens(u, tokenSet);
             });
 
             const tokens = Array.from(tokenSet);
@@ -1679,6 +1738,38 @@
 
             const title = '짝갈비 배송 업데이트';
             const body = (bodyText || '짝갈비 배송 내역이 업데이트되었습니다.').slice(0, 120);
+
+            fetch('/api/send-push', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tokens: tokens, title: title, body: body })
+            }).catch(function () {});
+          }).catch(function () {});
+        } catch (e) {}
+      }
+
+      // [한우 스펙&발주] 작성/수정 시 푸시 발송 (근무 중인 관리자 + 한우정리 파트 대상)
+      function sendFcmPushForHanwooSpec(titleText, bodyText, senderName) {
+        try {
+          if (!IS_PROD_HOST) return;
+          if (!db) return;
+
+          db.collection(COLLECTIONS.users).get().then(function (snapshot) {
+            const tokenSet = new Set();
+            snapshot.forEach(function (doc) {
+              const u = doc.data();
+              if (!u || u.workStatus === 'off') return;
+              if (u.name === senderName) return;
+              const isAllowed = u.isAdmin === true || normalizePartName(u.part) === '한우정리';
+              if (!isAllowed) return;
+              collectUserTokens(u, tokenSet);
+            });
+
+            const tokens = Array.from(tokenSet);
+            if (tokens.length === 0) return;
+
+            const title = titleText || '[한우 스펙&발주] 업데이트';
+            const body = (bodyText || '한우 스펙/발주 내역이 업데이트되었습니다.').slice(0, 120);
 
             fetch('/api/send-push', {
               method: 'POST',
@@ -2002,18 +2093,36 @@
         if (window.MinsokRibs && typeof window.MinsokRibs.render === 'function') {
           window.MinsokRibs.render();
         }
+        if (window.MinsokHanwooSpec && typeof window.MinsokHanwooSpec.render === 'function') {
+          window.MinsokHanwooSpec.render();
+        }
+      }
+
+      function canAccessHanwooSpec(user) {
+        if (!user) return false;
+        return user.isAdmin === true || normalizePartName(user.part) === '한우정리';
       }
 
       function renderTabUI() {
+        const me = getCurrentUser();
+        const allowHanwooSpec = canAccessHanwooSpec(me);
+
+        // 권한 없는 사용자가 hanwooSpec 탭에 있으면 기본 탭으로 이동
+        if (state.activeTab === 'hanwooSpec' && !allowHanwooSpec) {
+          state.activeTab = 'officeField';
+        }
+
         const isOffice = state.activeTab === 'officeField';
         const isField = state.activeTab === 'field';
         const isFrozen = state.activeTab === 'frozen';
         const isRibs = state.activeTab === 'ribs';
+        const isHanwooSpec = state.activeTab === 'hanwooSpec' && allowHanwooSpec;
 
         const officePanel = document.getElementById('officeFieldTabPanel');
         const fieldPanel = document.getElementById('fieldTabPanel');
         const frozenPanel = document.getElementById('frozenTabPanel');
         const ribsPanel = document.getElementById('ribsTabPanel');
+        const hanwooSpecPanel = document.getElementById('hanwooSpecTabPanel');
         const dateHistoryWrapper = document.getElementById('dateHistoryWrapper');
 
         const headerInner = document.getElementById('headerInner');
@@ -2024,9 +2133,16 @@
         const tabFieldBtn = document.getElementById('tabFieldBtn');
         const tabFrozenBtn = document.getElementById('tabFrozenBtn');
         const tabRibsBtn = document.getElementById('tabRibsBtn');
+        const tabHanwooSpecBtn = document.getElementById('tabHanwooSpecBtn');
 
-        const activeBtnCls = 'relative flex items-center justify-center gap-1 py-2.5 px-1.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-extrabold transition cursor-pointer bg-[#B30E2A] text-white shadow-sm';
-        const inactiveBtnCls = 'relative flex items-center justify-center gap-1 py-2.5 px-1.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600';
+        // 권한에 따라 하단 탭 4열 / 5열 자동 전환
+        if (bottomTabInner) {
+          bottomTabInner.classList.toggle('grid-cols-5', allowHanwooSpec);
+          bottomTabInner.classList.toggle('grid-cols-4', !allowHanwooSpec);
+        }
+
+        const activeBtnCls = 'relative flex items-center justify-center gap-1 py-2.5 px-1 sm:px-2.5 rounded-xl text-[10.5px] sm:text-xs font-extrabold transition cursor-pointer bg-[#B30E2A] text-white shadow-sm';
+        const inactiveBtnCls = 'relative flex items-center justify-center gap-1 py-2.5 px-1 sm:px-2.5 rounded-xl text-[10.5px] sm:text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600';
 
         officePanel.classList.toggle('hidden', !isOffice);
         officePanel.classList.toggle('tab-section-hidden', !isOffice);
@@ -2039,6 +2155,10 @@
         if (ribsPanel) {
           ribsPanel.classList.toggle('hidden', !isRibs);
           ribsPanel.classList.toggle('tab-section-hidden', !isRibs);
+        }
+        if (hanwooSpecPanel) {
+          hanwooSpecPanel.classList.toggle('hidden', !isHanwooSpec);
+          hanwooSpecPanel.classList.toggle('tab-section-hidden', !isHanwooSpec);
         }
         dateHistoryWrapper.classList.toggle('hidden', !isField);
 
@@ -2062,12 +2182,18 @@
         tabFieldBtn.className = isField ? activeBtnCls : inactiveBtnCls;
         if (tabFrozenBtn) tabFrozenBtn.className = isFrozen ? activeBtnCls : inactiveBtnCls;
         if (tabRibsBtn) tabRibsBtn.className = isRibs ? activeBtnCls : inactiveBtnCls;
+        if (tabHanwooSpecBtn) {
+          tabHanwooSpecBtn.className = (allowHanwooSpec ? '' : 'hidden ') + (isHanwooSpec ? activeBtnCls : inactiveBtnCls);
+        }
 
         if (isFrozen && window.MinsokInventory && typeof window.MinsokInventory.render === 'function') {
           window.MinsokInventory.render();
         }
         if (isRibs && window.MinsokRibs && typeof window.MinsokRibs.render === 'function') {
           window.MinsokRibs.render();
+        }
+        if (isHanwooSpec && window.MinsokHanwooSpec && typeof window.MinsokHanwooSpec.render === 'function') {
+          window.MinsokHanwooSpec.render();
         }
       }
 
@@ -2638,6 +2764,21 @@
           officeBtn.className = `relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors cursor-pointer ${officeOn ? 'bg-[#B30E2A]' : 'bg-slate-300'}`;
           officeKnob.className = `inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${officeOn ? 'translate-x-6' : 'translate-x-1'}`;
         }
+
+        const statusBadge = document.getElementById('pushConnectStatusBadge');
+        if (statusBadge) {
+          const perm = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
+          if (perm === 'granted') {
+            statusBadge.textContent = '연결됨';
+            statusBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-700';
+          } else if (perm === 'denied') {
+            statusBadge.textContent = '차단됨';
+            statusBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-red-100 text-red-600';
+          } else {
+            statusBadge.textContent = '미연결';
+            statusBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-700';
+          }
+        }
       }
 
       function openNotifySettingsModal() {
@@ -3189,6 +3330,14 @@
 
         // --- 카테고리별 알림 설정 모달 ---
         document.getElementById('openNotifySettingsBtn').addEventListener('click', openNotifySettingsModal);
+        const connectPushBtnEl = document.getElementById('connectPushBtn');
+        if (connectPushBtnEl) {
+          connectPushBtnEl.addEventListener('click', function () {
+            const user = getCurrentUser();
+            if (!user) return;
+            syncFcmTokenForCurrentUser(user, true);
+          });
+        }
         document.getElementById('closeNotifySettingsBtn').addEventListener('click', closeNotifySettingsModal);
         document.getElementById('notifySettingsModal').addEventListener('click', function (e) {
           if (e.target === this) closeNotifySettingsModal();
@@ -3342,6 +3491,18 @@
         if (tabRibsBtnEl) {
           tabRibsBtnEl.addEventListener('click', function () {
             state.activeTab = 'ribs';
+            renderTabUI();
+          });
+        }
+
+        const tabHanwooSpecBtnEl = document.getElementById('tabHanwooSpecBtn');
+        if (tabHanwooSpecBtnEl) {
+          tabHanwooSpecBtnEl.addEventListener('click', function () {
+            if (!canAccessHanwooSpec(getCurrentUser())) {
+              showToast('관리자 또는 한우정리 파트만 접근할 수 있습니다.');
+              return;
+            }
+            state.activeTab = 'hanwooSpec';
             renderTabUI();
           });
         }
@@ -3734,7 +3895,9 @@
         escapeHtml: escapeHtml,
         normalizePartName: normalizePartName,
         formatMonthDayTime: formatMonthDayTime,
-        sendFcmPushForRibs: sendFcmPushForRibs
+        getDateKey: getDateKey,
+        sendFcmPushForRibs: sendFcmPushForRibs,
+        sendFcmPushForHanwooSpec: sendFcmPushForHanwooSpec
       };
 
       window.onload = function () {
@@ -3751,6 +3914,9 @@
         if (window.MinsokRibs && typeof window.MinsokRibs.init === 'function') {
           window.MinsokRibs.init();
         }
+        if (window.MinsokHanwooSpec && typeof window.MinsokHanwooSpec.init === 'function') {
+          window.MinsokHanwooSpec.init();
+        }
 
         updateHeaderClockAndMidnightCheck();
         setInterval(updateHeaderClockAndMidnightCheck, 1000);
@@ -3761,5 +3927,7 @@
   <script src="/inventory.js"></script>
   <!-- 짝갈비 배송 분리 모듈 -->
   <script src="/ribs.js"></script>
+  <!-- 한우 스펙&발주 분리 모듈 -->
+  <script src="/hanwoo_spec.js"></script>
 </body>
 </html>
