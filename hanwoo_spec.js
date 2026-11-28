@@ -279,13 +279,13 @@
         <button
           type="button"
           data-hs-edit-cut="${esc(cut)}"
-          class="text-left rounded-2xl border border-slate-200 bg-slate-50/70 hover:bg-slate-100/80 p-3 space-y-1 transition cursor-pointer"
+          class="text-left rounded-2xl border border-emerald-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/30 p-3 space-y-1 shadow-xs transition cursor-pointer"
         >
           <div class="flex items-center justify-between gap-1.5">
-            <span class="text-sm font-extrabold text-slate-700">${esc(cut)}</span>
-            <span class="px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-500 text-[10px] font-bold shrink-0">정상</span>
+            <span class="text-sm font-extrabold text-slate-900">${esc(cut)}</span>
+            <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-extrabold shrink-0">정상</span>
           </div>
-          <p class="text-[11px] font-medium text-slate-400">터치하여 특이사항 입력</p>
+          <p class="text-[11px] font-medium text-emerald-700/70">터치하여 특이사항 입력</p>
         </button>
       `;
     }).join('');
