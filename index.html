@@ -685,15 +685,20 @@
       <!-- ===================================================== -->
       <div id="frozenTabPanel" class="hidden tab-section-hidden space-y-4"></div>
 
+      <!-- ===================================================== -->
+      <!-- 탭 4: [짝갈비 배송] 업체·지역 자동 매칭 및 공지         -->
+      <!-- ===================================================== -->
+      <div id="ribsTabPanel" class="hidden tab-section-hidden space-y-4"></div>
+
     </main>
 
-    <!-- 하단 고정 3개 카테고리 탭 바 -->
+    <!-- 하단 고정 4개 카테고리 탭 바 -->
     <nav class="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur border-t border-slate-200 py-2 shadow-[0_-4px_12px_rgba(15,23,42,0.05)]">
-      <div id="bottomTabInner" class="w-full pc-wide-container mx-auto px-2.5 md:px-4 grid grid-cols-3 gap-2 transition-all">
+      <div id="bottomTabInner" class="w-full pc-wide-container mx-auto px-2 md:px-4 grid grid-cols-4 gap-1.5 sm:gap-2 transition-all">
         <button
           id="tabOfficeFieldBtn"
           type="button"
-          class="flex items-center justify-center gap-1.5 py-2.5 px-2 sm:px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-[#B30E2A] text-white shadow-sm"
+          class="flex items-center justify-center gap-1 py-2.5 px-1.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-extrabold transition cursor-pointer bg-[#B30E2A] text-white shadow-sm"
         >
           <span>📅</span>
           <span class="truncate">사무실&amp;현장</span>
@@ -701,7 +706,7 @@
         <button
           id="tabFieldBtn"
           type="button"
-          class="relative flex items-center justify-center gap-1.5 py-2.5 px-2 sm:px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600"
+          class="relative flex items-center justify-center gap-1 py-2.5 px-1.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600"
         >
           <span>📢</span>
           <span class="truncate">현장</span>
@@ -710,10 +715,18 @@
         <button
           id="tabFrozenBtn"
           type="button"
-          class="flex items-center justify-center gap-1.5 py-2.5 px-2 sm:px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600"
+          class="flex items-center justify-center gap-1 py-2.5 px-1.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600"
         >
           <span>❄️</span>
-          <span class="truncate">냉동재고현황</span>
+          <span class="truncate">냉동재고</span>
+        </button>
+        <button
+          id="tabRibsBtn"
+          type="button"
+          class="flex items-center justify-center gap-1 py-2.5 px-1.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600"
+        >
+          <span>🥩</span>
+          <span class="truncate">짝갈비배송</span>
         </button>
       </div>
     </nav>
@@ -1645,6 +1658,37 @@
         }
       }
 
+      // [짝갈비 배송] 공지/수정 시 푸시 발송 (근무 중인 전 직원 대상)
+      function sendFcmPushForRibs(bodyText, senderName) {
+        try {
+          if (!IS_PROD_HOST) return;
+          if (!db) return;
+
+          db.collection(COLLECTIONS.users).get().then(function (snapshot) {
+            const tokenSet = new Set();
+            snapshot.forEach(function (doc) {
+              const u = doc.data();
+              if (!u || !u.fcmToken) return;
+              if (u.workStatus === 'off') return;
+              if (u.name === senderName) return;
+              tokenSet.add(u.fcmToken);
+            });
+
+            const tokens = Array.from(tokenSet);
+            if (tokens.length === 0) return;
+
+            const title = '짝갈비 배송 업데이트';
+            const body = (bodyText || '짝갈비 배송 내역이 업데이트되었습니다.').slice(0, 120);
+
+            fetch('/api/send-push', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tokens: tokens, title: title, body: body })
+            }).catch(function () {});
+          }).catch(function () {});
+        } catch (e) {}
+      }
+
       function isUserWorking() {
         const me = getCurrentUser();
         return !!(me && me.workStatus !== 'off');
@@ -1955,16 +1999,21 @@
         if (window.MinsokInventory && typeof window.MinsokInventory.render === 'function') {
           window.MinsokInventory.render();
         }
+        if (window.MinsokRibs && typeof window.MinsokRibs.render === 'function') {
+          window.MinsokRibs.render();
+        }
       }
 
       function renderTabUI() {
         const isOffice = state.activeTab === 'officeField';
         const isField = state.activeTab === 'field';
         const isFrozen = state.activeTab === 'frozen';
+        const isRibs = state.activeTab === 'ribs';
 
         const officePanel = document.getElementById('officeFieldTabPanel');
         const fieldPanel = document.getElementById('fieldTabPanel');
         const frozenPanel = document.getElementById('frozenTabPanel');
+        const ribsPanel = document.getElementById('ribsTabPanel');
         const dateHistoryWrapper = document.getElementById('dateHistoryWrapper');
 
         const headerInner = document.getElementById('headerInner');
@@ -1974,9 +2023,10 @@
         const tabOfficeBtn = document.getElementById('tabOfficeFieldBtn');
         const tabFieldBtn = document.getElementById('tabFieldBtn');
         const tabFrozenBtn = document.getElementById('tabFrozenBtn');
+        const tabRibsBtn = document.getElementById('tabRibsBtn');
 
-        const activeBtnCls = 'relative flex items-center justify-center gap-1.5 py-2.5 px-2 sm:px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-[#B30E2A] text-white shadow-sm';
-        const inactiveBtnCls = 'relative flex items-center justify-center gap-1.5 py-2.5 px-2 sm:px-3 rounded-xl text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600';
+        const activeBtnCls = 'relative flex items-center justify-center gap-1 py-2.5 px-1.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-extrabold transition cursor-pointer bg-[#B30E2A] text-white shadow-sm';
+        const inactiveBtnCls = 'relative flex items-center justify-center gap-1 py-2.5 px-1.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-extrabold transition cursor-pointer bg-slate-100 hover:bg-slate-200/70 text-slate-600';
 
         officePanel.classList.toggle('hidden', !isOffice);
         officePanel.classList.toggle('tab-section-hidden', !isOffice);
@@ -1985,6 +2035,10 @@
         if (frozenPanel) {
           frozenPanel.classList.toggle('hidden', !isFrozen);
           frozenPanel.classList.toggle('tab-section-hidden', !isFrozen);
+        }
+        if (ribsPanel) {
+          ribsPanel.classList.toggle('hidden', !isRibs);
+          ribsPanel.classList.toggle('tab-section-hidden', !isRibs);
         }
         dateHistoryWrapper.classList.toggle('hidden', !isField);
 
@@ -2006,12 +2060,14 @@
 
         tabOfficeBtn.className = isOffice ? activeBtnCls : inactiveBtnCls;
         tabFieldBtn.className = isField ? activeBtnCls : inactiveBtnCls;
-        if (tabFrozenBtn) {
-          tabFrozenBtn.className = isFrozen ? activeBtnCls : inactiveBtnCls;
-        }
+        if (tabFrozenBtn) tabFrozenBtn.className = isFrozen ? activeBtnCls : inactiveBtnCls;
+        if (tabRibsBtn) tabRibsBtn.className = isRibs ? activeBtnCls : inactiveBtnCls;
 
         if (isFrozen && window.MinsokInventory && typeof window.MinsokInventory.render === 'function') {
           window.MinsokInventory.render();
+        }
+        if (isRibs && window.MinsokRibs && typeof window.MinsokRibs.render === 'function') {
+          window.MinsokRibs.render();
         }
       }
 
@@ -2277,7 +2333,8 @@
           const d = parseDateKey(dKey);
           const count = (state.noticesByDate[dKey] || []).length;
           const isSelected = dKey === state.selectedNoticeDate;
-          const label = dKey === todayKey ? '오늘' : `${d.getMonth() + 1}/${d.getDate()}(${WEEKDAYS_KO[d.getDay()]})`;
+          const mdLabel = `${d.getMonth() + 1}/${d.getDate()}(${WEEKDAYS_KO[d.getDay()]})`;
+          const label = dKey === todayKey ? `오늘 ${d.getMonth() + 1}/${d.getDate()}` : mdLabel;
           const cls = isSelected
             ? 'bg-[#B30E2A] text-white border-[#B30E2A] shadow-xs'
             : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100';
@@ -2287,7 +2344,7 @@
               data-notice-date="${dKey}"
               class="px-3 py-1.5 rounded-xl border text-xs font-extrabold whitespace-nowrap shrink-0 cursor-pointer transition ${cls}"
             >
-              ${label}${count > 0 ? ` <span class="opacity-80">(${count})</span>` : ''}
+              ${label}${count > 0 ? ` <span class="opacity-80">· ${count}건</span>` : ''}
             </button>
           `;
         }).join('');
@@ -3281,6 +3338,14 @@
           });
         }
 
+        const tabRibsBtnEl = document.getElementById('tabRibsBtn');
+        if (tabRibsBtnEl) {
+          tabRibsBtnEl.addEventListener('click', function () {
+            state.activeTab = 'ribs';
+            renderTabUI();
+          });
+        }
+
         // --- 월간 캘린더 컨트롤 및 클릭 ---
         document.getElementById('calPrevMonthBtn').addEventListener('click', function () {
           state.calViewMonth -= 1;
@@ -3668,7 +3733,8 @@
         openConfirmModal: openConfirmModal,
         escapeHtml: escapeHtml,
         normalizePartName: normalizePartName,
-        formatMonthDayTime: formatMonthDayTime
+        formatMonthDayTime: formatMonthDayTime,
+        sendFcmPushForRibs: sendFcmPushForRibs
       };
 
       window.onload = function () {
@@ -3682,6 +3748,9 @@
         if (window.MinsokInventory && typeof window.MinsokInventory.init === 'function') {
           window.MinsokInventory.init();
         }
+        if (window.MinsokRibs && typeof window.MinsokRibs.init === 'function') {
+          window.MinsokRibs.init();
+        }
 
         updateHeaderClockAndMidnightCheck();
         setInterval(updateHeaderClockAndMidnightCheck, 1000);
@@ -3690,5 +3759,7 @@
   </script>
   <!-- 냉동재고현황 분리 모듈 -->
   <script src="/inventory.js"></script>
+  <!-- 짝갈비 배송 분리 모듈 -->
+  <script src="/ribs.js"></script>
 </body>
 </html>
